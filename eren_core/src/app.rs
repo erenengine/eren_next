@@ -149,7 +149,8 @@ impl<'a, T: Updatable> App<'a, T> {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            // Draw calls go here
+
+            self.root.update(&mut self.context);
         }
 
         queue.submit(Some(encoder.finish()));
