@@ -1,0 +1,11 @@
+[package]
+name = "eren_2d"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytemuck = "1.23.0"
+eren_core = { path = "../eren_rs_core" }
+tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }
+wgpu = "25.0.2"
+winit = "0.30.11"
