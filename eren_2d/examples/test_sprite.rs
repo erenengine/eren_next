@@ -21,8 +21,8 @@ impl Updatable for Root {
             self.loading_screen = None;
         }
 
-        if let Some(screen) = self.loading_screen.as_mut() {
-            screen.update(context);
+        if let Some(loading_screen) = self.loading_screen.as_mut() {
+            loading_screen.update(context);
         } else {
             self.in_game_screen.update(context);
         }
@@ -75,5 +75,5 @@ impl Updatable for InGameScreen {
 }
 
 fn main() {
-    App::new(Root::new()).run();
+    App::new(800, 600, "Test Sprite", Root::new()).run();
 }
