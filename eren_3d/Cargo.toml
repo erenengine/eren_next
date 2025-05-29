@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.98"
 bytemuck = "1.23.0"
 cgmath = "0.18.0"
-eren_core = { path = "../eren_rs_core" }
+eren_core = { path = "../eren_core" }
 gltf = "1.4.1"
 image = "0.25.6"
 tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }

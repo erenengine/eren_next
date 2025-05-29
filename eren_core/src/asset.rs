@@ -1,3 +1,5 @@
+use crate::context::GameContext;
+
 pub struct AssetBundle {
     assets: Vec<(String, String)>,
 }
@@ -16,7 +18,15 @@ impl AssetBundle {
         self.assets.push((id.to_string(), path.to_string()));
     }
 
-    pub fn is_loaded(&self) -> bool {
+    pub fn is_loaded(&self, context: &GameContext) -> bool {
         false
+    }
+}
+
+pub struct AssetManager {}
+
+impl AssetManager {
+    pub fn new() -> Self {
+        Self {}
     }
 }

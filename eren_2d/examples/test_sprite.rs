@@ -17,7 +17,7 @@ impl Root {
 
 impl Updatable for Root {
     fn update(&mut self, context: &mut GameContext) {
-        if self.in_game_screen.is_asset_loaded() {
+        if self.in_game_screen.is_asset_loaded(context) {
             self.loading_screen = None;
         }
 
@@ -61,14 +61,14 @@ impl InGameScreen {
         }
     }
 
-    pub fn is_asset_loaded(&self) -> bool {
-        self.asset_bundle.is_loaded()
+    pub fn is_asset_loaded(&self, context: &GameContext) -> bool {
+        self.asset_bundle.is_loaded(context)
     }
 }
 
 impl Updatable for InGameScreen {
     fn update(&mut self, context: &mut GameContext) {
-        if self.asset_bundle.is_loaded() {
+        if self.asset_bundle.is_loaded(context) {
             self.sprite.update(context);
         }
     }
