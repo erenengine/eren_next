@@ -1,0 +1,8 @@
+{
+  "name": "@erenengine/2d",
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "dependencies": {},
+  "devDependencies": {}
+}
