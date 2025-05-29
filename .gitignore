@@ -1,0 +1,9 @@
+# OS 및 에디터 관련 파일
+.DS_Store
+Thumbs.db
+
+# 빌드
+dist/
+
+# 환경 설정
+.env
