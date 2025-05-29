@@ -1,7 +1,7 @@
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
@@ -49,7 +49,7 @@ impl<'a, T: Updatable> App<'a, T> {
 
     async fn init_gpu(&mut self) {
         let window = self.window.unwrap();
-        let surface = unsafe { self.instance.create_surface(window) }.unwrap();
+        let surface = self.instance.create_surface(window).unwrap();
 
         let adapter = self
             .instance
@@ -99,6 +99,63 @@ impl<'a, T: Updatable> App<'a, T> {
         }
     }
 
+    fn draw_frame(&mut self) {
+        let device = match self.device.as_ref() {
+            Some(device) => device,
+            None => return,
+        };
+        let queue = match self.queue.as_ref() {
+            Some(queue) => queue,
+            None => return,
+        };
+        let surface = match self.surface.as_ref() {
+            Some(surface) => surface,
+            None => return,
+        };
+
+        let frame = match surface.get_current_texture() {
+            Ok(frame) => frame,
+            Err(e) => {
+                eprintln!("Failed to acquire frame: {e}");
+                return;
+            }
+        };
+
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+        {
+            let _rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            // Draw calls go here
+        }
+
+        queue.submit(Some(encoder.finish()));
+        frame.present();
+    }
+
     pub fn run(&mut self) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -131,10 +188,24 @@ impl<'a, T: Updatable> ApplicationHandler for App<'a, T> {
         self.gpu_initialized = false;
     }
 
-    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
+        if let Some(window) = self.window {
+            if let StartCause::Poll = cause {
+                window.request_redraw();
+            }
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
                 self.resize_surface(size.width, size.height);
+            }
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                self.draw_frame();
             }
             _ => {}
         }

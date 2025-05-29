@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bevy = "0.16.0"
 bytemuck = "1.23.0"
 eren_core = { path = "../eren_core" }
 tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }
