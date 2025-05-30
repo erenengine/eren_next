@@ -1,1 +1,1 @@
-pub mod sprite;
+pub mod app;

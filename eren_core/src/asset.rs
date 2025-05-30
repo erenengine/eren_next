@@ -1,4 +1,4 @@
-use crate::context::GameContext;
+use crate::game_context::GameContext;
 
 pub struct AssetBundle {
     assets: Vec<(String, String)>,
