@@ -1,7 +1,7 @@
 #[derive(PartialEq)]
 pub enum GraphicsLibrary {
-    Wgpu,
     Ash,
+    Wgpu,
 }
 
 pub mod ash;

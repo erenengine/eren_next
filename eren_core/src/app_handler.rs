@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -6,42 +8,34 @@ use winit::{
     window::{Window, WindowId},
 };
 
-use crate::{
-    render::{GraphicsLibrary, gpu::GpuState},
-    update::Update,
-};
+use crate::{game::state::GameState, render::gpu::GpuContext, update::Update};
 
 pub struct AppHandlerConfig {
     pub window_width: u32,
     pub window_height: u32,
     pub window_title: String,
-    pub graphics_library: GraphicsLibrary,
 }
 
 pub struct AppHandler<T: Update> {
     config: AppHandlerConfig,
-    window: Option<Window>,
-    gpu: Box<dyn GpuState>,
-    pub root: T,
+    window: Option<Arc<Window>>,
+    gpu_context: Box<dyn GpuContext>,
 
-    gpu_initialized: bool,
+    pub root: T,
+    state: GameState,
+
+    gpu_surface_created: bool,
 }
 
 impl<T: Update> AppHandler<T> {
-    pub fn new(config: AppHandlerConfig, root: T) -> Self {
-        let gpu: Box<dyn GpuState>;
-        if config.graphics_library == GraphicsLibrary::Wgpu {
-            gpu = Box::new(crate::render::wgpu::gpu::WgpuGpuState::new());
-        } else {
-            gpu = Box::new(crate::render::ash::gpu::AshGpuState::new());
-        }
-
+    pub fn new(config: AppHandlerConfig, gpu_context: Box<dyn GpuContext>, root: T) -> Self {
         Self {
             config,
             window: None,
-            gpu,
+            gpu_context,
             root,
-            gpu_initialized: false,
+            state: GameState::new(),
+            gpu_surface_created: false,
         }
     }
 
@@ -62,19 +56,20 @@ impl<T: Update> ApplicationHandler for AppHandler<T> {
                     self.config.window_height,
                 ));
             let window = event_loop.create_window(attrs).unwrap();
-            self.window = Some(window);
+            self.window = Some(Arc::new(window));
         }
 
-        if !self.gpu_initialized {
-            self.gpu.init(&self.window.as_ref().unwrap());
-            self.gpu_initialized = true;
+        if !self.gpu_surface_created {
+            self.gpu_context
+                .create_surface(self.window.as_ref().unwrap().clone());
+            self.gpu_surface_created = true;
         }
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         self.window = None;
-        self.gpu.cleanup();
-        self.gpu_initialized = false;
+        self.gpu_context.destroy_surface();
+        self.gpu_surface_created = false;
     }
 
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: winit::event::StartCause) {
@@ -88,13 +83,14 @@ impl<T: Update> ApplicationHandler for AppHandler<T> {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
-                self.gpu.resize_surface(size.width, size.height);
+                self.gpu_context.resize_surface(size.width, size.height);
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                self.gpu.draw_frame();
+                self.root.update(&mut self.state);
+                self.gpu_context.update(&mut self.state);
             }
             _ => {}
         }

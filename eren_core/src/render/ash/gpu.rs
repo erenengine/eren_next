@@ -1,20 +1,32 @@
-use crate::render::gpu::GpuState;
+use std::sync::Arc;
+
+use crate::{game::state::GameState, render::gpu::GpuContext};
 use winit::window::Window;
 
-pub struct AshGpuState {}
+use super::pass::AshRenderPass;
 
-impl AshGpuState {
+pub struct AshGpuContext {
+    render_passes: Vec<Box<dyn AshRenderPass>>,
+}
+
+impl AshGpuContext {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            render_passes: Vec::new(),
+        }
+    }
+
+    pub fn add_render_pass(&mut self, render_pass: Box<dyn AshRenderPass>) {
+        self.render_passes.push(render_pass);
     }
 }
 
-impl GpuState for AshGpuState {
-    fn init(&mut self, window: &Window) {}
+impl GpuContext for AshGpuContext {
+    fn create_surface(&mut self, window: Arc<Window>) {}
 
-    fn cleanup(&mut self) {}
+    fn destroy_surface(&mut self) {}
 
     fn resize_surface(&mut self, width: u32, height: u32) {}
 
-    fn draw_frame(&mut self) {}
+    fn update(&mut self, state: &mut GameState) {}
 }

@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
 use winit::window::Window;
 
-pub trait GpuState {
-    fn init(&mut self, window: &Window);
-    fn cleanup(&mut self);
+use crate::game::state::GameState;
+
+pub trait GpuContext {
+    fn create_surface(&mut self, window: Arc<Window>);
+    fn destroy_surface(&mut self);
     fn resize_surface(&mut self, width: u32, height: u32);
-    fn draw_frame(&mut self);
+    fn update(&mut self, state: &mut GameState);
 }
