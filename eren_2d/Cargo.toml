@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.16.0"
-bytemuck = "1.23.0"
+ash = "0.38.0"
 eren_core = { path = "../eren_core" }
-tokio = { version = "1.45", features = ["rt-multi-thread", "macros"] }
 wgpu = "25.0.2"
 winit = "0.30.11"

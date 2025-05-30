@@ -4,7 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-image = "0.25.6"
+ash = "0.38.0"
+ash-window = "0.13.0"
 pollster = "0.4.0"
+raw-window-handle = "0.6.2"
 wgpu = "25.0.0"
 winit = "0.30.11"

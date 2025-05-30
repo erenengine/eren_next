@@ -1,13 +1,15 @@
-use eren_core::render::RenderPassHandler;
+use eren_core::render::GraphicsLibrary;
+
+pub struct AppConfig {
+    graphics_library: GraphicsLibrary,
+}
 
 pub struct App {
-    render_passes: Vec<Box<dyn RenderPassHandler>>,
+    config: AppConfig,
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self {
-            render_passes: Vec::new(),
-        }
+    pub fn new(config: AppConfig) -> Self {
+        Self { config }
     }
 }
