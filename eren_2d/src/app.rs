@@ -1,15 +1,35 @@
-use eren_core::render::GraphicsLibrary;
+use eren_core::{
+    app_handler::{AppHandler, AppHandlerConfig},
+    render::GraphicsLibrary,
+    update::Update,
+};
 
 pub struct AppConfig {
-    graphics_library: GraphicsLibrary,
+    pub window_width: u32,
+    pub window_height: u32,
+    pub window_title: String,
+    pub graphics_library: GraphicsLibrary,
 }
 
-pub struct App {
-    config: AppConfig,
+pub struct App<T: Update> {
+    app_handler: AppHandler<T>,
 }
 
-impl App {
-    pub fn new(config: AppConfig) -> Self {
-        Self { config }
+impl<T: Update> App<T> {
+    pub fn new(config: AppConfig, root: T) -> Self {
+        let app_handler = AppHandler::new(
+            AppHandlerConfig {
+                window_width: config.window_width,
+                window_height: config.window_height,
+                window_title: config.window_title,
+                graphics_library: config.graphics_library,
+            },
+            root,
+        );
+        Self { app_handler }
+    }
+
+    pub fn run(&mut self) {
+        self.app_handler.run();
     }
 }
