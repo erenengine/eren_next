@@ -1,3 +1,2 @@
-pub mod app;
-pub mod game;
-pub mod render;
+pub mod game_world;
+pub mod render_world;
