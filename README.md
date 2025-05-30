@@ -11,3 +11,7 @@ export DYLD_FALLBACK_LIBRARY_PATH=$VULKAN_SDK/lib
 export VK_ICD_FILENAMES=$VULKAN_SDK/share/vulkan/icd.d/MoltenVK_icd.json
 export VK_LAYER_PATH=$VULKAN_SDK/share/vulkan/explicit_layer.d
 ```
+
+## TODO
+- asset_id를 문자열이 아닌 enum으로 변경
+- 렌더 큐는 타입별로 구분하여 상태 관리
