@@ -77,7 +77,7 @@ impl WgpuGpuContext {
         self.asset_manager.surface_created(&device, &queue);
 
         for render_pass in &mut self.render_passes {
-            render_pass.surface_created();
+            render_pass.surface_created(&device);
         }
     }
 }
