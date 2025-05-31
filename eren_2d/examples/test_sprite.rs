@@ -84,7 +84,7 @@ impl InGameScreen {
         let window_width = 1280.0;
         let window_height = 720.0;
 
-        for _ in 0..10_000 {
+        for _ in 0..100_000 {
             let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
             let y = rng.random_range(-window_height / 2.0..window_height / 2.0);
             sprites.push(Sprite::new(x, y, SpriteAssets::TestSprite));
@@ -119,7 +119,7 @@ impl Update<SpriteAssets> for InGameScreen {
                 state.window_size.height as f32,
             );
             let half_screen = Vec2::new(screen.x / 2.0, screen.y / 2.0);
-            let half_size = Vec2::new(200.0, 200.0);
+            let half_size = Vec2::new(32.0, 32.0);
 
             for (sprite, velocity) in self.sprites.iter_mut().zip(self.velocities.iter_mut()) {
                 sprite.x += velocity.x * dt;
