@@ -1,6 +1,9 @@
 use eren_2d::{
     app::{App, AppConfig},
-    game_world::{asset_bundle::AssetBundle, sprite::Sprite, state::GameState, update::Update},
+    game_world::{
+        asset_bundle::AssetBundle, sprite::Sprite, state::GameState, transform::GlobalTransform,
+        update::Update,
+    },
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
 use rand::Rng;
@@ -26,21 +29,27 @@ impl Root {
 }
 
 impl Update<SpriteAssets> for Root {
-    fn update(&mut self, game_state: &mut GameState<SpriteAssets>) {
+    fn update(
+        &mut self,
+        game_state: &mut GameState<SpriteAssets>,
+        parent_global_transform: &GlobalTransform,
+    ) {
         if self.in_game_screen.is_asset_loaded(game_state) {
             self.loading_screen = None;
         }
 
         if let Some(loading_screen) = self.loading_screen.as_mut() {
-            loading_screen.update(game_state);
+            loading_screen.update(game_state, parent_global_transform);
         } else {
-            self.in_game_screen.update(game_state);
+            self.in_game_screen
+                .update(game_state, parent_global_transform);
         }
     }
 }
 
 struct LoadingScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
+    logo: Sprite<SpriteAssets>,
 }
 
 impl LoadingScreen {
@@ -50,12 +59,21 @@ impl LoadingScreen {
                 SpriteAssets::Logo,
                 "examples/assets/logo.png".into(),
             )]),
+            logo: Sprite::new(0.0, 0.0, SpriteAssets::Logo),
         }
     }
 }
 
 impl Update<SpriteAssets> for LoadingScreen {
-    fn update(&mut self, _state: &mut GameState<SpriteAssets>) {}
+    fn update(
+        &mut self,
+        game_state: &mut GameState<SpriteAssets>,
+        parent_global_transform: &GlobalTransform,
+    ) {
+        if self.asset_bundle.is_loaded(game_state) {
+            self.logo.update(game_state, parent_global_transform);
+        }
+    }
 }
 
 struct Vec2 {
@@ -104,29 +122,37 @@ impl InGameScreen {
         }
     }
 
-    pub fn is_asset_loaded(&mut self, state: &mut GameState<SpriteAssets>) -> bool {
-        self.asset_bundle.is_loaded(state)
+    pub fn is_asset_loaded(&mut self, game_state: &mut GameState<SpriteAssets>) -> bool {
+        self.asset_bundle.is_loaded(game_state)
     }
 }
 
 impl Update<SpriteAssets> for InGameScreen {
-    fn update(&mut self, state: &mut GameState<SpriteAssets>) {
-        if self.asset_bundle.is_loaded(state) {
-            let dt = state.delta_time;
+    fn update(
+        &mut self,
+        game_state: &mut GameState<SpriteAssets>,
+        parent_global_transform: &GlobalTransform,
+    ) {
+        if self.asset_bundle.is_loaded(game_state) {
+            let dt = game_state.delta_time;
 
             let screen = Vec2::new(
-                state.window_size.width as f32,
-                state.window_size.height as f32,
+                game_state.window_size.width as f32,
+                game_state.window_size.height as f32,
             );
             let half_screen = Vec2::new(screen.x / 2.0, screen.y / 2.0);
             let half_size = Vec2::new(32.0, 32.0);
 
             for (sprite, velocity) in self.sprites.iter_mut().zip(self.velocities.iter_mut()) {
-                sprite.x += velocity.x * dt;
-                sprite.y += velocity.y * dt;
+                sprite
+                    .local_transform
+                    .set_x(sprite.local_transform.x() + velocity.x * dt);
+                sprite
+                    .local_transform
+                    .set_y(sprite.local_transform.y() + velocity.y * dt);
 
-                let sprite_screen_x = sprite.x + half_screen.x;
-                let sprite_screen_y = sprite.y + half_screen.y;
+                let sprite_screen_x = sprite.local_transform.x() + half_screen.x;
+                let sprite_screen_y = sprite.local_transform.y() + half_screen.y;
 
                 if sprite_screen_x < half_size.x || sprite_screen_x > screen.x - half_size.x {
                     velocity.x *= -1.0;
@@ -135,7 +161,7 @@ impl Update<SpriteAssets> for InGameScreen {
                     velocity.y *= -1.0;
                 }
 
-                sprite.update(state);
+                sprite.update(game_state, parent_global_transform);
             }
         }
     }

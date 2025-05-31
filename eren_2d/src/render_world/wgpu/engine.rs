@@ -1,11 +1,9 @@
-// WgpuEngine2D 파일
-
 use std::{hash::Hash, time::Instant};
 
 use eren_core::render_world::wgpu::engine::WgpuEngine;
 use winit::dpi::PhysicalSize;
 
-use crate::game_world::{state::GameState, update::Update};
+use crate::game_world::{state::GameState, transform::GlobalTransform, update::Update};
 
 use super::{
     asset_managers::sprite_asset_manager::WgpuSpriteAssetManager,
@@ -16,8 +14,9 @@ pub struct WgpuEngine2D<R, SA>
 where
     SA: Eq + Hash + Copy + Ord, // WgpuSpriteRenderer에서 Ord를 요구하므로 추가
 {
-    root_node: R,
     game_state: GameState<SA>,
+    root_node: R,
+    default_global_transform: GlobalTransform,
 
     sprite_asset_manager: WgpuSpriteAssetManager<SA>,
     sprite_renderer: WgpuSpriteRenderer<SA>, // SA 제네릭 명시
@@ -33,10 +32,13 @@ where
 {
     pub fn new(root_node: R) -> Self {
         Self {
-            root_node,
             game_state: GameState::new(),
+            root_node,
+            default_global_transform: GlobalTransform::new(),
+
             sprite_asset_manager: WgpuSpriteAssetManager::new(),
             sprite_renderer: WgpuSpriteRenderer::new(), // new()는 SA 제약을 따름
+
             last_frame_time: Instant::now(),
         }
     }
@@ -94,7 +96,8 @@ where
             self.game_state.sprite_assets.ready.push(asset);
         }
 
-        self.root_node.update(&mut self.game_state);
+        self.root_node
+            .update(&mut self.game_state, &self.default_global_transform);
 
         let mut render_commands: Vec<SpriteRenderCommand<SA>> = vec![];
         for render_request in self.game_state.render_requests.drain(..) {
