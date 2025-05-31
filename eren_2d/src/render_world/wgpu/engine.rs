@@ -38,5 +38,7 @@ impl<R: Update<SA>, SA> WgpuEngine for WgpuEngine2D<R, SA> {
         encoder: &mut wgpu::CommandEncoder,
     ) {
         self.root_node.update(&mut self.game_state);
+
+        self.game_state.render_requests.clear();
     }
 }

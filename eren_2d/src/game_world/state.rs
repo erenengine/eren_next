@@ -1,17 +1,15 @@
-use eren_core::{
-    game_world::state::{assets::AssetsState, input::InputState},
-    math::Vec2,
-};
+use eren_core::game_world::state::{assets::AssetsState, input::InputState};
 
-struct RenderRequest<SA> {
-    position: Vec2,
-    sprite_asset_id: SA,
+pub struct RenderRequest<SA> {
+    pub x: f32,
+    pub y: f32,
+    pub sprite_asset_id: SA,
 }
 
 pub struct GameState<SA> {
     assets: AssetsState,
     input: InputState,
-    render_requests: Vec<RenderRequest<SA>>,
+    pub render_requests: Vec<RenderRequest<SA>>,
 }
 
 impl<SA> GameState<SA> {
