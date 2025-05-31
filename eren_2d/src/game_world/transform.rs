@@ -27,6 +27,14 @@ impl LocalTransform {
         }
     }
 
+    pub fn set_position(&mut self, x: f32, y: f32) {
+        if self.x != x || self.y != y {
+            self.x = x;
+            self.y = y;
+            self.is_dirty = true;
+        }
+    }
+
     pub fn x(&self) -> f32 {
         self.x
     }

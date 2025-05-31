@@ -144,12 +144,10 @@ impl GameNode<SpriteAssets> for InGameScreen {
             let half_size = Vec2::new(32.0, 32.0);
 
             for (sprite, velocity) in self.sprites.iter_mut().zip(self.velocities.iter_mut()) {
-                sprite
-                    .local_transform
-                    .set_x(sprite.local_transform.x() + velocity.x * dt);
-                sprite
-                    .local_transform
-                    .set_y(sprite.local_transform.y() + velocity.y * dt);
+                sprite.local_transform.set_position(
+                    sprite.local_transform.x() + velocity.x * dt,
+                    sprite.local_transform.y() + velocity.y * dt,
+                );
 
                 let sprite_screen_x = sprite.local_transform.x() + half_screen.x;
                 let sprite_screen_y = sprite.local_transform.y() + half_screen.y;
