@@ -3,6 +3,7 @@ use eren_2d::{
     game_world::{asset_bundle::AssetBundle, sprite::Sprite, state::GameState, update::Update},
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
+use rand::Rng;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum SpriteAssets {
@@ -70,23 +71,36 @@ impl Vec2 {
 
 struct InGameScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
-    sprite1: Sprite<SpriteAssets>,
-    sprite2: Sprite<SpriteAssets>,
-    velocity1: Vec2,
-    velocity2: Vec2,
+    sprites: Vec<Sprite<SpriteAssets>>,
+    velocities: Vec<Vec2>,
 }
 
 impl InGameScreen {
     pub fn new() -> Self {
+        let mut sprites = Vec::with_capacity(10_000);
+        let mut velocities = Vec::with_capacity(10_000);
+        let mut rng = rand::rng();
+
+        let window_width = 1280.0;
+        let window_height = 720.0;
+
+        for _ in 0..10_000 {
+            let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
+            let y = rng.random_range(-window_height / 2.0..window_height / 2.0);
+            sprites.push(Sprite::new(x, y, SpriteAssets::TestSprite));
+
+            let vx = rng.random_range(-2000.0..2000.0);
+            let vy = rng.random_range(-2000.0..2000.0);
+            velocities.push(Vec2::new(vx, vy));
+        }
+
         Self {
             asset_bundle: AssetBundle::new(vec![(
                 SpriteAssets::TestSprite,
                 "examples/assets/test_sprite.png".into(),
             )]),
-            sprite1: Sprite::new(100.0, 100.0, SpriteAssets::TestSprite),
-            sprite2: Sprite::new(500.0, 400.0, SpriteAssets::TestSprite),
-            velocity1: Vec2::new(1000.0, 1500.0),
-            velocity2: Vec2::new(-1200.0, -800.0),
+            sprites,
+            velocities,
         }
     }
 
@@ -107,34 +121,22 @@ impl Update<SpriteAssets> for InGameScreen {
             let half_screen = Vec2::new(screen.x / 2.0, screen.y / 2.0);
             let half_size = Vec2::new(200.0, 200.0);
 
-            self.sprite1.x += self.velocity1.x * dt;
-            self.sprite1.y += self.velocity1.y * dt;
+            for (sprite, velocity) in self.sprites.iter_mut().zip(self.velocities.iter_mut()) {
+                sprite.x += velocity.x * dt;
+                sprite.y += velocity.y * dt;
 
-            let sprite1_screen_x = self.sprite1.x + half_screen.x;
-            let sprite1_screen_y = self.sprite1.y + half_screen.y;
+                let sprite_screen_x = sprite.x + half_screen.x;
+                let sprite_screen_y = sprite.y + half_screen.y;
 
-            if sprite1_screen_x < half_size.x || sprite1_screen_x > screen.x - half_size.x {
-                self.velocity1.x *= -1.0;
+                if sprite_screen_x < half_size.x || sprite_screen_x > screen.x - half_size.x {
+                    velocity.x *= -1.0;
+                }
+                if sprite_screen_y < half_size.y || sprite_screen_y > screen.y - half_size.y {
+                    velocity.y *= -1.0;
+                }
+
+                sprite.update(state);
             }
-            if sprite1_screen_y < half_size.y || sprite1_screen_y > screen.y - half_size.y {
-                self.velocity1.y *= -1.0;
-            }
-
-            self.sprite2.x += self.velocity2.x * dt;
-            self.sprite2.y += self.velocity2.y * dt;
-
-            let sprite2_screen_x = self.sprite2.x + half_screen.x;
-            let sprite2_screen_y = self.sprite2.y + half_screen.y;
-
-            if sprite2_screen_x < half_size.x || sprite2_screen_x > screen.x - half_size.x {
-                self.velocity2.x *= -1.0;
-            }
-            if sprite2_screen_y < half_size.y || sprite2_screen_y > screen.y - half_size.y {
-                self.velocity2.y *= -1.0;
-            }
-
-            self.sprite1.update(state);
-            self.sprite2.update(state);
         }
     }
 }

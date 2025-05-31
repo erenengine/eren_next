@@ -66,6 +66,9 @@ impl<R: Update<SA>, SA: Eq + Hash + Copy> WgpuEngine for WgpuEngine2D<R, SA> {
         self.game_state.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
 
+        // TODO: remove
+        println!("FPS: {}", 1.0 / self.game_state.delta_time);
+
         for (asset, path) in self.game_state.sprite_assets.pending.drain() {
             self.sprite_asset_manager.load_sprite(asset, path); // sync
             self.game_state.sprite_assets.ready.push(asset);
