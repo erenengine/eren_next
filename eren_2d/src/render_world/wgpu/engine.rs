@@ -2,9 +2,17 @@ use eren_core::render_world::wgpu::engine::WgpuEngine;
 
 use crate::game_world::{state::GameState, update::Update};
 
+use super::{
+    asset_managers::sprite_asset_manager::WgpuSpriteAssetManager,
+    renderers::sprite_renderer::WgpuSpriteRenderer,
+};
+
 pub struct WgpuEngine2D<R, SA> {
     root_node: R,
     game_state: GameState<SA>,
+
+    sprite_asset_manager: WgpuSpriteAssetManager,
+    sprite_renderer: WgpuSpriteRenderer,
 }
 
 impl<R, SA> WgpuEngine2D<R, SA> {
@@ -12,6 +20,9 @@ impl<R, SA> WgpuEngine2D<R, SA> {
         Self {
             root_node,
             game_state: GameState::new(),
+
+            sprite_asset_manager: WgpuSpriteAssetManager::new(),
+            sprite_renderer: WgpuSpriteRenderer::new(),
         }
     }
 }
