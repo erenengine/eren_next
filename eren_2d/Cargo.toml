@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ash = "0.38.0"
+bytemuck = "1.23.0"
 eren_core = { path = "../eren_core" }
 image = "0.25.6"
 wgpu = "25.0.2"

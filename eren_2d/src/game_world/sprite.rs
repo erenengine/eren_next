@@ -16,8 +16,8 @@ impl<SA> Sprite<SA> {
 }
 
 impl<SA: Copy> Update<SA> for Sprite<SA> {
-    fn update(&mut self, state: &mut GameState<SA>) {
-        state.render_requests.push(RenderRequest {
+    fn update(&mut self, game_state: &mut GameState<SA>) {
+        game_state.render_requests.push(RenderRequest {
             x: self.x,
             y: self.y,
             sprite_asset_id: self.asset_id,

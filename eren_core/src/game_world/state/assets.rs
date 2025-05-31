@@ -1,13 +1,15 @@
+use std::collections::HashMap;
+
 pub struct AssetsState<A> {
-    ready: Vec<A>,
-    pending: Vec<A>,
+    pub ready: Vec<A>,
+    pub pending: HashMap<A, String>,
 }
 
 impl<A> AssetsState<A> {
     pub fn new() -> Self {
         Self {
             ready: Vec::new(),
-            pending: Vec::new(),
+            pending: HashMap::new(),
         }
     }
 }

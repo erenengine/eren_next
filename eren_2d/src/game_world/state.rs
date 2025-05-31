@@ -7,8 +7,8 @@ pub struct RenderRequest<SA> {
 }
 
 pub struct GameState<SA> {
-    sprite_assets: AssetsState<SA>,
-    input: InputState,
+    pub sprite_assets: AssetsState<SA>,
+    pub input: InputState,
     pub render_requests: Vec<RenderRequest<SA>>,
 }
 

@@ -4,7 +4,7 @@ use eren_2d::{
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum SpriteAssets {
     Logo,
     TestSprite,
@@ -25,15 +25,15 @@ impl Root {
 }
 
 impl Update<SpriteAssets> for Root {
-    fn update(&mut self, state: &mut GameState<SpriteAssets>) {
-        if self.in_game_screen.is_asset_loaded(state) {
+    fn update(&mut self, game_state: &mut GameState<SpriteAssets>) {
+        if self.in_game_screen.is_asset_loaded(game_state) {
             self.loading_screen = None;
         }
 
         if let Some(loading_screen) = self.loading_screen.as_mut() {
-            loading_screen.update(state);
+            loading_screen.update(game_state);
         } else {
-            self.in_game_screen.update(state);
+            self.in_game_screen.update(game_state);
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::hash::Hash;
+
 use eren_core::{
     render_world::{
         ash::gpu::AshGpuResourceManager,
@@ -24,7 +26,10 @@ pub struct App {
 }
 
 impl App {
-    pub fn new<R: Update<SA> + 'static, SA: 'static>(config: AppConfig, root_node: R) -> Self {
+    pub fn new<R: Update<SA> + 'static, SA: Eq + Hash + Copy + 'static>(
+        config: AppConfig,
+        root_node: R,
+    ) -> Self {
         let gpu_resource_manager: Box<dyn GpuResourceManager>;
         if config.graphics_library == GraphicsLibrary::Ash {
             let engine = AshEngine2D::new(root_node);
