@@ -1,6 +1,6 @@
-pub struct AssetsState {}
+pub struct InputState {}
 
-impl AssetsState {
+impl InputState {
     pub fn new() -> Self {
         Self {}
     }

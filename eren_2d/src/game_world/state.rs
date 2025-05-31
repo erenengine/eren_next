@@ -1,17 +1,25 @@
-use super::sprite::SpriteDrawData;
+use eren_core::{
+    game_world::state::{assets::AssetsState, input::InputState},
+    math::Vec2,
+};
 
-pub struct GameState<AssetId> {
-    pub sprite_draw_list: Vec<SpriteDrawData<AssetId>>,
+struct RenderRequest<SA> {
+    position: Vec2,
+    sprite_asset_id: SA,
 }
 
-impl<AssetId> GameState<AssetId> {
+pub struct GameState<SA> {
+    assets: AssetsState,
+    input: InputState,
+    render_requests: Vec<RenderRequest<SA>>,
+}
+
+impl<SA> GameState<SA> {
     pub fn new() -> Self {
         Self {
-            sprite_draw_list: Vec::new(),
+            assets: AssetsState::new(),
+            input: InputState::new(),
+            render_requests: Vec::new(),
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.sprite_draw_list.clear();
     }
 }
