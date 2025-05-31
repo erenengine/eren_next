@@ -1,12 +1,19 @@
 use std::{collections::HashMap, hash::Hash};
 
+#[derive(Clone)]
+pub struct WgpuTexture {
+    pub view: wgpu::TextureView,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub struct WgpuSpriteAssetManager<SA> {
     device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
 
     loading_assets: Vec<SA>,
     loaded_images: HashMap<SA, image::RgbaImage>,
-    texture_views: HashMap<SA, wgpu::TextureView>,
+    textures: HashMap<SA, WgpuTexture>,
 }
 
 impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
@@ -17,7 +24,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
 
             loading_assets: Vec::new(),
             loaded_images: HashMap::new(),
-            texture_views: HashMap::new(),
+            textures: HashMap::new(),
         }
     }
 
@@ -41,8 +48,14 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
                 view_formats: &[],
             });
 
-            self.texture_views
-                .insert(asset, texture.create_view(&Default::default()));
+            self.textures.insert(
+                asset,
+                WgpuTexture {
+                    view: texture.create_view(&Default::default()),
+                    width,
+                    height,
+                },
+            );
 
             queue.write_texture(
                 texture.as_image_copy(),
@@ -75,7 +88,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
     pub fn on_gpu_resources_lost(&mut self) {
         self.device = None;
         self.queue = None;
-        self.texture_views.clear();
+        self.textures.clear();
     }
 
     pub fn load_sprite(&mut self, asset: SA, path: String) {
@@ -84,7 +97,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
         self.upload_texture(asset, &image);
     }
 
-    pub fn get_texture_view(&self, asset: SA) -> Option<&wgpu::TextureView> {
-        self.texture_views.get(&asset)
+    pub fn get_texture(&self, asset: SA) -> Option<&WgpuTexture> {
+        self.textures.get(&asset)
     }
 }

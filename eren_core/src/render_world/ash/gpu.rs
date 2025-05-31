@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::engine::AshEngine;
 use crate::render_world::common::gpu::GpuResourceManager;
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 pub struct AshGpuResourceManager {
     engine: Box<dyn AshEngine>,
@@ -23,7 +23,9 @@ impl GpuResourceManager for AshGpuResourceManager {
         self.engine.on_gpu_resources_lost();
     }
 
-    fn on_window_resized(&mut self, width: u32, height: u32) {}
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
+        self.engine.on_window_resized(window_size);
+    }
 
     fn update(&mut self) {
         self.engine.update();

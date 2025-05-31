@@ -1,13 +1,22 @@
 use std::collections::HashMap;
 
 use wgpu::util::DeviceExt;
+use winit::dpi::PhysicalSize;
+
+use crate::render_world::wgpu::asset_managers::sprite_asset_manager::WgpuTexture;
 
 const SPRITE_SHADER: &str = include_str!("sprite.wgsl");
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct ScreenInfo {
+    resolution: [f32; 2],
+}
 
 pub struct SpriteRenderCommand {
     pub x: f32,
     pub y: f32,
-    pub texture_view: wgpu::TextureView,
+    pub texture: WgpuTexture,
 }
 
 /// CPU side representation of one vertex in our unit quad.
@@ -33,6 +42,28 @@ impl Vertex {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceData {
+    offset: [f32; 2],
+    size: [f32; 2],
+}
+
+impl InstanceData {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+        2 => Float32x2, // offset
+        3 => Float32x2  // size
+    ];
+
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
 pub struct WgpuSpriteRenderer {
     // cached GPU objects
     device: Option<wgpu::Device>,
@@ -42,6 +73,9 @@ pub struct WgpuSpriteRenderer {
     bind_group_layout: Option<wgpu::BindGroupLayout>,
     quad_vertex_buffer: Option<wgpu::Buffer>,
     quad_index_buffer: Option<wgpu::Buffer>,
+
+    screen_resolution_buffer: Option<wgpu::Buffer>,
+    screen_bind_group: Option<wgpu::BindGroup>,
 
     // bind group cache for texture views (keyed by raw pointer)
     bind_group_cache: HashMap<usize, wgpu::BindGroup>,
@@ -58,14 +92,58 @@ impl WgpuSpriteRenderer {
             quad_vertex_buffer: None,
             quad_index_buffer: None,
 
+            screen_resolution_buffer: None,
+            screen_bind_group: None,
+
             bind_group_cache: HashMap::new(),
         }
     }
 
-    pub fn on_gpu_resources_ready(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn on_gpu_resources_ready(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        window_size: PhysicalSize<u32>,
+    ) {
         // Take ownership clones so we can keep them around.
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
+
+        // Screen resolution buffer ---------------------------------------------
+        let screen_info = ScreenInfo {
+            resolution: [window_size.width as f32, window_size.height as f32],
+        };
+
+        let screen_resolution_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("screen info buffer"),
+                contents: bytemuck::cast_slice(&[screen_info]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let screen_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("screen bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let screen_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("screen bind group"),
+            layout: &screen_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: screen_resolution_buffer.as_entire_binding(),
+            }],
+        });
 
         // Sampler --------------------------------------------------------------
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -80,27 +158,28 @@ impl WgpuSpriteRenderer {
         });
 
         // Bind group layout ----------------------------------------------------
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("sprite bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
+        let sprite_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("sprite bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
 
         // Shader module --------------------------------------------------------
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -111,7 +190,7 @@ impl WgpuSpriteRenderer {
         // Render pipeline ------------------------------------------------------
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("sprite pipeline layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&screen_bind_group_layout, &sprite_bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -121,7 +200,7 @@ impl WgpuSpriteRenderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main".into(),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), InstanceData::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -146,7 +225,6 @@ impl WgpuSpriteRenderer {
 
         // Unit quad geometry ---------------------------------------------------
         let vertices: &[f32] = &[
-            // positions   // uvs
             -0.5, -0.5, 0.0, 1.0, 0.5, -0.5, 1.0, 1.0, 0.5, 0.5, 1.0, 0.0, -0.5, 0.5, 0.0, 0.0,
         ];
         let indices: &[u16] = &[0, 1, 2, 2, 3, 0];
@@ -165,14 +243,38 @@ impl WgpuSpriteRenderer {
 
         // Store ----------------------------------------------------------------
         self.sampler = Some(sampler);
-        self.bind_group_layout = Some(bind_group_layout);
+        self.bind_group_layout = Some(sprite_bind_group_layout);
         self.pipeline = Some(pipeline);
         self.quad_vertex_buffer = Some(quad_vb);
         self.quad_index_buffer = Some(quad_ib);
+        self.screen_resolution_buffer = Some(screen_resolution_buffer);
+        self.screen_bind_group = Some(screen_bind_group);
         self.bind_group_cache.clear();
     }
 
-    pub fn on_gpu_resources_lost(&mut self) {}
+    pub fn on_gpu_resources_lost(&mut self) {
+        self.device = None;
+        self.queue = None;
+        self.pipeline = None;
+        self.sampler = None;
+        self.bind_group_layout = None;
+        self.quad_vertex_buffer = None;
+        self.quad_index_buffer = None;
+        self.screen_resolution_buffer = None;
+        self.screen_bind_group = None;
+        self.bind_group_cache.clear();
+    }
+
+    pub fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
+        if let (Some(buffer), Some(queue)) =
+            (self.screen_resolution_buffer.as_ref(), self.queue.as_ref())
+        {
+            let new_data = ScreenInfo {
+                resolution: [window_size.width as f32, window_size.height as f32],
+            };
+            queue.write_buffer(buffer, 0, bytemuck::cast_slice(&[new_data]));
+        }
+    }
 
     pub fn render(
         &mut self,
@@ -180,10 +282,6 @@ impl WgpuSpriteRenderer {
         command_encoder: &mut wgpu::CommandEncoder,
         render_commands: Vec<SpriteRenderCommand>,
     ) {
-        if render_commands.is_empty() {
-            return;
-        }
-
         // ---------------------------------------------------------------------
         let device = self.device.as_ref().expect("renderer not ready");
         let sampler = self.sampler.as_ref().unwrap();
@@ -213,22 +311,44 @@ impl WgpuSpriteRenderer {
             occlusion_query_set: None,
         });
 
+        let instance_data: Vec<InstanceData> = if render_commands.is_empty() {
+            vec![InstanceData {
+                offset: [0.0, 0.0],
+                size: [1.0, 1.0],
+            }] // dummy instance
+        } else {
+            render_commands
+                .iter()
+                .map(|cmd| InstanceData {
+                    offset: [cmd.x, cmd.y],
+                    size: [cmd.texture.width as f32, cmd.texture.height as f32],
+                })
+                .collect()
+        };
+
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("instance buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         rpass.set_pipeline(pipeline);
         rpass.set_vertex_buffer(0, vb.slice(..));
+        rpass.set_vertex_buffer(1, instance_buffer.slice(..));
         rpass.set_index_buffer(ib.slice(..), wgpu::IndexFormat::Uint16);
 
         // Draw each sprite -----------------------------------------------------
-        for cmd in render_commands {
+        for (i, cmd) in render_commands.iter().enumerate() {
             // -- bind group cache keyed by texture_view pointer ---------------
-            let key = &cmd.texture_view as *const _ as usize;
-            let bind_group = self.bind_group_cache.entry(key).or_insert_with(|| {
+            let key = &cmd.texture.view as *const _ as usize;
+            let sprite_bind_group = self.bind_group_cache.entry(key).or_insert_with(|| {
                 device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("sprite bg"),
                     layout: bgl,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&cmd.texture_view),
+                            resource: wgpu::BindingResource::TextureView(&cmd.texture.view),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
@@ -238,10 +358,9 @@ impl WgpuSpriteRenderer {
                 })
             });
 
-            rpass.set_bind_group(0, &bind_group.clone(), &[]);
-
-            // Draw the quad ----------------------------------------------------
-            rpass.draw_indexed(0..6, 0, 0..1);
+            rpass.set_bind_group(0, &self.screen_bind_group, &[]);
+            rpass.set_bind_group(1, &sprite_bind_group.clone(), &[]);
+            rpass.draw_indexed(0..6, 0, i as u32..(i as u32 + 1));
         }
     }
 }

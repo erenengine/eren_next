@@ -59,7 +59,8 @@ impl Update<SpriteAssets> for LoadingScreen {
 
 struct InGameScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
-    sprite: Sprite<SpriteAssets>,
+    sprite1: Sprite<SpriteAssets>,
+    sprite2: Sprite<SpriteAssets>,
 }
 
 impl InGameScreen {
@@ -69,7 +70,8 @@ impl InGameScreen {
                 SpriteAssets::TestSprite,
                 "examples/assets/test_sprite.png".into(),
             )]),
-            sprite: Sprite::new(0.0, 0.0, SpriteAssets::TestSprite),
+            sprite1: Sprite::new(100.0, 100.0, SpriteAssets::TestSprite),
+            sprite2: Sprite::new(-100.0, -100.0, SpriteAssets::TestSprite),
         }
     }
 
@@ -81,7 +83,8 @@ impl InGameScreen {
 impl Update<SpriteAssets> for InGameScreen {
     fn update(&mut self, state: &mut GameState<SpriteAssets>) {
         if self.asset_bundle.is_loaded(state) {
-            self.sprite.update(state);
+            self.sprite1.update(state);
+            self.sprite2.update(state);
         }
     }
 }

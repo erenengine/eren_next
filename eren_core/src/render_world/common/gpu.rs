@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 #[derive(PartialEq)]
 pub enum GraphicsLibrary {
@@ -13,7 +13,7 @@ pub trait GpuResourceManager {
 
     fn on_window_lost(&mut self);
 
-    fn on_window_resized(&mut self, width: u32, height: u32);
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>);
 
     fn update(&mut self);
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::engine::WgpuEngine;
 use crate::render_world::common::gpu::GpuResourceManager;
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 pub struct WgpuGpuResourceManager {
     engine: Box<dyn WgpuEngine>,
@@ -67,7 +67,7 @@ impl WgpuGpuResourceManager {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        self.engine.on_gpu_resources_ready(&device, &queue);
+        self.engine.on_gpu_resources_ready(&device, &queue, size);
     }
 }
 
@@ -85,13 +85,15 @@ impl GpuResourceManager for WgpuGpuResourceManager {
         self.engine.on_gpu_resources_lost();
     }
 
-    fn on_window_resized(&mut self, width: u32, height: u32) {
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
         if let (Some(surface), Some(device), Some(surface_config)) =
             (&self.surface, &self.device, &mut self.surface_config)
         {
-            surface_config.width = width;
-            surface_config.height = height;
+            surface_config.width = window_size.width;
+            surface_config.height = window_size.height;
             surface.configure(device, surface_config);
+
+            self.engine.on_window_resized(window_size);
         }
     }
 

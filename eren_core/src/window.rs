@@ -69,8 +69,7 @@ impl ApplicationHandler for WindowLifecycleManager {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::Resized(size) => {
-                self.gpu_resource_manager
-                    .on_window_resized(size.width, size.height);
+                self.gpu_resource_manager.on_window_resized(size);
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();

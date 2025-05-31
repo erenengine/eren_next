@@ -1,6 +1,7 @@
 use std::hash::Hash;
 
 use eren_core::render_world::wgpu::engine::WgpuEngine;
+use winit::dpi::PhysicalSize;
 
 use crate::game_world::{state::GameState, update::Update};
 
@@ -30,15 +31,25 @@ impl<R, SA: Eq + Hash + Clone> WgpuEngine2D<R, SA> {
 }
 
 impl<R: Update<SA>, SA: Eq + Hash + Copy> WgpuEngine for WgpuEngine2D<R, SA> {
-    fn on_gpu_resources_ready(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn on_gpu_resources_ready(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        window_size: PhysicalSize<u32>,
+    ) {
         self.sprite_asset_manager
             .on_gpu_resources_ready(device, queue);
-        self.sprite_renderer.on_gpu_resources_ready(device, queue);
+        self.sprite_renderer
+            .on_gpu_resources_ready(device, queue, window_size);
     }
 
     fn on_gpu_resources_lost(&mut self) {
         self.sprite_asset_manager.on_gpu_resources_lost();
         self.sprite_renderer.on_gpu_resources_lost();
+    }
+
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
+        self.sprite_renderer.on_window_resized(window_size);
     }
 
     fn update(
@@ -55,14 +66,14 @@ impl<R: Update<SA>, SA: Eq + Hash + Copy> WgpuEngine for WgpuEngine2D<R, SA> {
 
         let mut render_commands: Vec<SpriteRenderCommand> = vec![];
         for render_request in self.game_state.render_requests.drain(..) {
-            let texture_view = self
+            let texture = self
                 .sprite_asset_manager
-                .get_texture_view(render_request.sprite_asset_id);
-            if let Some(texture_view) = texture_view {
+                .get_texture(render_request.sprite_asset_id);
+            if let Some(texture) = texture {
                 render_commands.push(SpriteRenderCommand {
                     x: render_request.x,
                     y: render_request.y,
-                    texture_view: texture_view.clone(),
+                    texture: texture.clone(),
                 });
             }
         }
