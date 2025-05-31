@@ -13,7 +13,7 @@ pub trait GpuResourceManager {
 
     fn on_window_lost(&mut self);
 
-    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>);
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>, window_scale_factor: f64);
 
     fn update(&mut self);
 }

@@ -46,18 +46,19 @@ impl WgpuGpuResourceManager {
             .unwrap();
 
         let surface_caps = surface.get_capabilities(&adapter);
-        let format = surface_caps.formats[0];
-        let size = window.inner_size();
+        let surface_format = surface_caps.formats[0];
+        let window_size = window.inner_size();
+        let window_scale_factor = window.scale_factor();
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width: size.width,
-            height: size.height,
+            format: surface_format,
+            width: window_size.width,
+            height: window_size.height,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
-            desired_maximum_frame_latency: 1,
+            desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &surface_config);
@@ -67,7 +68,13 @@ impl WgpuGpuResourceManager {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
 
-        self.engine.on_gpu_resources_ready(&device, &queue, size);
+        self.engine.on_gpu_resources_ready(
+            &device,
+            &queue,
+            surface_format,
+            window_size,
+            window_scale_factor,
+        );
     }
 }
 
@@ -85,7 +92,7 @@ impl GpuResourceManager for WgpuGpuResourceManager {
         self.engine.on_gpu_resources_lost();
     }
 
-    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>, window_scale_factor: f64) {
         if let (Some(surface), Some(device), Some(surface_config)) =
             (&self.surface, &self.device, &mut self.surface_config)
         {
@@ -93,7 +100,8 @@ impl GpuResourceManager for WgpuGpuResourceManager {
             surface_config.height = window_size.height;
             surface.configure(device, surface_config);
 
-            self.engine.on_window_resized(window_size);
+            self.engine
+                .on_window_resized(window_size, window_scale_factor);
         }
     }
 

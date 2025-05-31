@@ -1,5 +1,6 @@
 struct ScreenInfo {
     resolution: vec2<f32>,
+    scale_factor: f32,
 };
 
 @group(0) @binding(0)
@@ -22,12 +23,15 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     let resolution = screen.resolution;
-    let quad_pos_pixels = input.pos * input.size;
+    let scale_factor = screen.scale_factor;
+
+    let physical_sprite_size = input.size * scale_factor;
+    let quad_pos_pixels = input.pos * physical_sprite_size;
 
     let pos_ndc = quad_pos_pixels / resolution * 2.0;
     let offset_ndc = vec2<f32>(
-        (input.offset.x / resolution.x) * 2.0,
-        -(input.offset.y / resolution.y) * 2.0
+        (input.offset.x / resolution.x * scale_factor) * 2.0,
+        -(input.offset.y / resolution.y * scale_factor) * 2.0
     );
 
     out.position = vec4<f32>(offset_ndc + pos_ndc, 0.0, 1.0);

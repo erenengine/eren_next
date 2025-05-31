@@ -23,8 +23,9 @@ impl GpuResourceManager for AshGpuResourceManager {
         self.engine.on_gpu_resources_lost();
     }
 
-    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>) {
-        self.engine.on_window_resized(window_size);
+    fn on_window_resized(&mut self, window_size: PhysicalSize<u32>, window_scale_factor: f64) {
+        self.engine
+            .on_window_resized(window_size, window_scale_factor);
     }
 
     fn update(&mut self) {

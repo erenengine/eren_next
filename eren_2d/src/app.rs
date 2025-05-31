@@ -26,7 +26,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new<R: Update<SA> + 'static, SA: Eq + Hash + Copy + 'static>(
+    pub fn new<R: Update<SA> + 'static, SA: Eq + Hash + Ord + Copy + 'static>(
         config: AppConfig,
         root_node: R,
     ) -> Self {

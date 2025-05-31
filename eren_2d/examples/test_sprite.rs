@@ -5,7 +5,7 @@ use eren_2d::{
 use eren_core::render_world::common::gpu::GraphicsLibrary;
 use rand::Rng;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum SpriteAssets {
     Logo,
     TestSprite,
