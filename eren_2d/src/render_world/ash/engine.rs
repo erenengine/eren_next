@@ -1,6 +1,6 @@
 use eren_core::render_world::ash::engine::AshEngine;
 
-use crate::game_world::{state::GameState, transform::GlobalTransform, update::Update};
+use crate::game_world::{state::GameState, transform::GlobalTransform, game_node::GameNode};
 
 use winit::dpi::PhysicalSize;
 
@@ -20,7 +20,7 @@ impl<R, SA> AshEngine2D<R, SA> {
     }
 }
 
-impl<R: Update<SA>, SA> AshEngine for AshEngine2D<R, SA> {
+impl<R: GameNode<SA>, SA> AshEngine for AshEngine2D<R, SA> {
     fn on_gpu_resources_ready(&mut self) {}
 
     fn on_gpu_resources_lost(&mut self) {}

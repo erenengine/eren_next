@@ -10,7 +10,7 @@ use eren_core::{
 };
 
 use crate::{
-    game_world::update::Update,
+    game_world::game_node::GameNode,
     render_world::{ash::engine::AshEngine2D, wgpu::engine::WgpuEngine2D},
 };
 
@@ -26,7 +26,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new<R: Update<SA> + 'static, SA: Eq + Hash + Ord + Copy + 'static>(
+    pub fn new<R: GameNode<SA> + 'static, SA: Eq + Hash + Ord + Copy + 'static>(
         config: AppConfig,
         root_node: R,
     ) -> Self {

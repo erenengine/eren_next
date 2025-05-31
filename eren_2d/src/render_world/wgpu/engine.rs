@@ -3,7 +3,7 @@ use std::{hash::Hash, time::Instant};
 use eren_core::render_world::wgpu::engine::WgpuEngine;
 use winit::dpi::PhysicalSize;
 
-use crate::game_world::{state::GameState, transform::GlobalTransform, update::Update};
+use crate::game_world::{state::GameState, transform::GlobalTransform, game_node::GameNode};
 
 use super::{
     asset_managers::sprite_asset_manager::WgpuSpriteAssetManager,
@@ -26,7 +26,7 @@ where
 
 impl<R, SA> WgpuEngine2D<R, SA>
 where
-    R: Update<SA>, // R의 제약은 그대로
+    R: GameNode<SA>, // R의 제약은 그대로
     SA: Eq + Hash + Copy + Ord + Clone, // WgpuSpriteRenderer에서 Ord 요구, SA가 Clone 되어야 할 수 있음 (GameState 등에서)
                                         // SpriteRenderCommand<SA>의 sprite_asset_id가 SA를 값으로 가지므로 Clone 필요
 {
@@ -46,7 +46,7 @@ where
 
 impl<R, SA> WgpuEngine for WgpuEngine2D<R, SA>
 where
-    R: Update<SA>,
+    R: GameNode<SA>,
     SA: Eq + Hash + Copy + Ord + Clone, // 여기도 일관성 있게 제약 조건 업데이트
 {
     fn on_gpu_resources_ready(

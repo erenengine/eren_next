@@ -1,8 +1,8 @@
 use eren_2d::{
     app::{App, AppConfig},
     game_world::{
-        asset_bundle::AssetBundle, sprite::Sprite, state::GameState, transform::GlobalTransform,
-        update::Update,
+        asset_bundle::AssetBundle, game_node::GameNode, sprite::Sprite, state::GameState,
+        transform::GlobalTransform,
     },
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
@@ -14,12 +14,12 @@ enum SpriteAssets {
     TestSprite,
 }
 
-struct Root {
+struct RootNode {
     loading_screen: Option<LoadingScreen>,
     in_game_screen: InGameScreen,
 }
 
-impl Root {
+impl RootNode {
     pub fn new() -> Self {
         Self {
             loading_screen: Some(LoadingScreen::new()),
@@ -28,7 +28,7 @@ impl Root {
     }
 }
 
-impl Update<SpriteAssets> for Root {
+impl GameNode<SpriteAssets> for RootNode {
     fn update(
         &mut self,
         game_state: &mut GameState<SpriteAssets>,
@@ -64,7 +64,7 @@ impl LoadingScreen {
     }
 }
 
-impl Update<SpriteAssets> for LoadingScreen {
+impl GameNode<SpriteAssets> for LoadingScreen {
     fn update(
         &mut self,
         game_state: &mut GameState<SpriteAssets>,
@@ -127,7 +127,7 @@ impl InGameScreen {
     }
 }
 
-impl Update<SpriteAssets> for InGameScreen {
+impl GameNode<SpriteAssets> for InGameScreen {
     fn update(
         &mut self,
         game_state: &mut GameState<SpriteAssets>,
@@ -175,7 +175,7 @@ fn main() {
             window_title: "Test Sprite".to_string(),
             graphics_library: GraphicsLibrary::Wgpu,
         },
-        Root::new(),
+        RootNode::new(),
     )
     .run();
 }

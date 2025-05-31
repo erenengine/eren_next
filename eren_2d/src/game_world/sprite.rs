@@ -1,7 +1,7 @@
 use super::{
     state::{GameState, RenderRequest},
     transform::{GlobalTransform, LocalTransform},
-    update::Update,
+    game_node::GameNode,
 };
 
 pub struct Sprite<SA> {
@@ -20,7 +20,7 @@ impl<SA> Sprite<SA> {
     }
 }
 
-impl<SA: Copy> Update<SA> for Sprite<SA> {
+impl<SA: Copy> GameNode<SA> for Sprite<SA> {
     fn update(
         &mut self,
         game_state: &mut GameState<SA>,
