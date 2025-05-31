@@ -17,11 +17,15 @@ impl<R, SA> WgpuEngine2D<R, SA> {
 }
 
 impl<R: Update<SA>, SA> WgpuEngine for WgpuEngine2D<R, SA> {
-    fn on_gpu_resources_ready(&mut self) {}
+    fn on_gpu_resources_ready(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {}
 
     fn on_gpu_resources_lost(&mut self) {}
 
-    fn update(&mut self) {
+    fn update(
+        &mut self,
+        surface_texture_view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         self.root_node.update(&mut self.game_state);
     }
 }
