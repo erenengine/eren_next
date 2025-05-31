@@ -1,7 +1,13 @@
-pub struct AssetsState {}
+pub struct AssetsState<A> {
+    ready: Vec<A>,
+    pending: Vec<A>,
+}
 
-impl AssetsState {
+impl<A> AssetsState<A> {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            ready: Vec::new(),
+            pending: Vec::new(),
+        }
     }
 }

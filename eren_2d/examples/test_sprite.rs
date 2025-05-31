@@ -1,6 +1,6 @@
 use eren_2d::{
     app::{App, AppConfig},
-    game_world::{sprite::Sprite, state::GameState, update::Update},
+    game_world::{asset_bundle::AssetBundle, sprite::Sprite, state::GameState, update::Update},
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
 
@@ -11,20 +11,78 @@ enum SpriteAssets {
 }
 
 struct Root {
-    sprite: Sprite<SpriteAssets>,
+    loading_screen: Option<LoadingScreen>,
+    in_game_screen: InGameScreen,
 }
 
 impl Root {
     pub fn new() -> Self {
         Self {
-            sprite: Sprite::new(0.0, 0.0, SpriteAssets::TestSprite),
+            loading_screen: Some(LoadingScreen::new()),
+            in_game_screen: InGameScreen::new(),
         }
     }
 }
 
 impl Update<SpriteAssets> for Root {
     fn update(&mut self, state: &mut GameState<SpriteAssets>) {
-        self.sprite.update(state);
+        if self.in_game_screen.is_asset_loaded(state) {
+            self.loading_screen = None;
+        }
+
+        if let Some(loading_screen) = self.loading_screen.as_mut() {
+            loading_screen.update(state);
+        } else {
+            self.in_game_screen.update(state);
+        }
+    }
+}
+
+struct LoadingScreen {
+    asset_bundle: AssetBundle<SpriteAssets>,
+}
+
+impl LoadingScreen {
+    pub fn new() -> Self {
+        Self {
+            asset_bundle: AssetBundle::new(vec![(
+                SpriteAssets::Logo,
+                "examples/assets/logo.png".into(),
+            )]),
+        }
+    }
+}
+
+impl Update<SpriteAssets> for LoadingScreen {
+    fn update(&mut self, _state: &mut GameState<SpriteAssets>) {}
+}
+
+struct InGameScreen {
+    asset_bundle: AssetBundle<SpriteAssets>,
+    sprite: Sprite<SpriteAssets>,
+}
+
+impl InGameScreen {
+    pub fn new() -> Self {
+        Self {
+            asset_bundle: AssetBundle::new(vec![(
+                SpriteAssets::TestSprite,
+                "examples/assets/test_sprite.png".into(),
+            )]),
+            sprite: Sprite::new(0.0, 0.0, SpriteAssets::TestSprite),
+        }
+    }
+
+    pub fn is_asset_loaded(&mut self, state: &mut GameState<SpriteAssets>) -> bool {
+        self.asset_bundle.is_loaded(state)
+    }
+}
+
+impl Update<SpriteAssets> for InGameScreen {
+    fn update(&mut self, state: &mut GameState<SpriteAssets>) {
+        if self.asset_bundle.is_loaded(state) {
+            self.sprite.update(state);
+        }
     }
 }
 

@@ -7,7 +7,7 @@ pub struct RenderRequest<SA> {
 }
 
 pub struct GameState<SA> {
-    assets: AssetsState,
+    sprite_assets: AssetsState<SA>,
     input: InputState,
     pub render_requests: Vec<RenderRequest<SA>>,
 }
@@ -15,7 +15,7 @@ pub struct GameState<SA> {
 impl<SA> GameState<SA> {
     pub fn new() -> Self {
         Self {
-            assets: AssetsState::new(),
+            sprite_assets: AssetsState::new(),
             input: InputState::new(),
             render_requests: Vec::new(),
         }
