@@ -4,8 +4,8 @@ use super::{
 };
 
 pub struct Sprite<SA> {
-    x: f32,
-    y: f32,
+    pub x: f32,
+    pub y: f32,
     asset_id: SA,
 }
 
