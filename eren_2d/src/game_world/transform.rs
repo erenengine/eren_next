@@ -1,4 +1,4 @@
-use glam::Vec2;
+use glam::{Mat2, Vec2};
 
 pub struct LocalTransform {
     position: Vec2,
@@ -10,9 +10,9 @@ pub struct LocalTransform {
 }
 
 impl LocalTransform {
-    pub fn new(x: f32, y: f32) -> Self {
+    pub fn new() -> Self {
         Self {
-            position: Vec2::new(x, y),
+            position: Vec2::ZERO,
             pivot: Vec2::ZERO,
             scale: Vec2::splat(1.0),
             rotation: 0.0,
@@ -100,22 +100,8 @@ impl GlobalTransform {
         self.position
     }
 
-    pub fn set_position(&mut self, position: Vec2) {
-        if self.position != position {
-            self.position = position;
-            self.is_dirty = true;
-        }
-    }
-
     pub fn scale(&self) -> Vec2 {
         self.scale
-    }
-
-    pub fn set_scale(&mut self, scale: Vec2) {
-        if self.scale != scale {
-            self.scale = scale;
-            self.is_dirty = true;
-        }
     }
 
     pub fn rotation(&self) -> f32 {
@@ -128,28 +114,20 @@ impl GlobalTransform {
 
     pub fn update(&mut self, parent: &GlobalTransform, local: &LocalTransform) {
         if parent.is_dirty || local.is_dirty {
-            let rx = local.position.x * parent.scale.x;
-            let ry = local.position.y * parent.scale.y;
-
-            let p_cos = parent.rotation.cos();
-            let p_sin = parent.rotation.sin();
-
-            self.scale.x = parent.scale.x * local.scale.x;
-            self.scale.y = parent.scale.y * local.scale.y;
-
-            let pivot_x = local.pivot.x * self.scale.x;
-            let pivot_y = local.pivot.y * self.scale.y;
-
-            let cos = local.rotation.cos();
-            let sin = local.rotation.sin();
-
-            self.position.x =
-                parent.position.x + (rx * p_cos - ry * p_sin) - (pivot_x * cos - pivot_y * sin);
-            self.position.y =
-                parent.position.y + (rx * p_sin + ry * p_cos) - (pivot_x * sin + pivot_y * cos);
-
+            self.scale = parent.scale * local.scale;
             self.rotation = parent.rotation + local.rotation;
             self.alpha = parent.alpha * local.alpha;
+
+            let scaled_local_pos = local.position * parent.scale;
+            let parent_rotation_matrix = Mat2::from_angle(parent.rotation);
+            let rotated_scaled_local_pos = parent_rotation_matrix * scaled_local_pos;
+
+            let scaled_pivot = local.pivot * self.scale;
+            let local_rotation_matrix = Mat2::from_angle(local.rotation);
+            let rotated_scaled_pivot_offset = local_rotation_matrix * scaled_pivot;
+
+            self.position =
+                parent.position + rotated_scaled_local_pos - rotated_scaled_pivot_offset;
 
             self.is_dirty = true;
         }

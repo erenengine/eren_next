@@ -11,9 +11,9 @@ pub struct Sprite<SA> {
 }
 
 impl<SA> Sprite<SA> {
-    pub fn new(x: f32, y: f32, asset_id: SA) -> Self {
+    pub fn new(asset_id: SA) -> Self {
         Self {
-            transform: LocalTransform::new(x, y),
+            transform: LocalTransform::new(),
             global_transform: GlobalTransform::new(),
             asset_id,
         }

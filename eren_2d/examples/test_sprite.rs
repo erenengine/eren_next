@@ -60,7 +60,7 @@ impl LoadingScreen {
                 SpriteAssets::Logo,
                 "examples/assets/logo.png".into(),
             )]),
-            logo: Sprite::new(0.0, 0.0, SpriteAssets::Logo),
+            logo: Sprite::new(SpriteAssets::Logo),
         }
     }
 }
@@ -93,16 +93,21 @@ impl InGameScreen {
         let window_height = 720.0;
 
         for _ in 0..100_000 {
+            let mut sprite = Sprite::new(SpriteAssets::TestSprite);
+
             let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
             let y = rng.random_range(-window_height / 2.0..window_height / 2.0);
+            sprite.transform.set_position(Vec2::new(x, y));
 
-            let mut sprite = Sprite::new(x, y, SpriteAssets::TestSprite);
             let scale = rng.random_range(0.5..2.0);
             sprite.transform.set_scale(Vec2::splat(scale));
-            sprite
-                .transform
-                .set_rotation(rng.random_range(0.0..2.0 * std::f32::consts::PI));
-            sprite.transform.set_alpha(rng.random_range(0.0..1.0));
+
+            let rotation = rng.random_range(0.0..2.0 * std::f32::consts::PI);
+            sprite.transform.set_rotation(rotation);
+
+            let alpha = rng.random_range(0.0..1.0);
+            sprite.transform.set_alpha(alpha);
+
             sprites.push(sprite);
 
             let vx = rng.random_range(-2000.0..2000.0);
