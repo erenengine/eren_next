@@ -220,13 +220,13 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
         let indices: &[u16] = &[0, 1, 2, 2, 3, 0];
 
         let quad_vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("sprite quad vb"),
+            label: Some("sprite quad vertex buffer"),
             contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let quad_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("sprite quad ib"),
+            label: Some("sprite quad index buffer"),
             contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });

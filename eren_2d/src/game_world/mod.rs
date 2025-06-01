@@ -1,5 +1,4 @@
 pub mod asset_bundle;
-pub mod sprite;
+pub mod nodes;
 pub mod state;
 pub mod transform;
-pub mod game_node;

@@ -1,8 +1,8 @@
 use eren_2d::{
     app::{App, AppConfig},
     game_world::{
-        asset_bundle::AssetBundle, game_node::GameNode, sprite::Sprite, state::GameState,
-        transform::GlobalTransform,
+        asset_bundle::AssetBundle, nodes::game_node::GameNode, nodes::sprite_node::SpriteNode,
+        state::GameState, transform::GlobalTransform,
     },
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
@@ -50,7 +50,7 @@ impl GameNode<SpriteAssets> for RootNode {
 
 struct LoadingScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
-    logo: Sprite<SpriteAssets>,
+    logo: SpriteNode<SpriteAssets>,
 }
 
 impl LoadingScreen {
@@ -60,7 +60,7 @@ impl LoadingScreen {
                 SpriteAssets::Logo,
                 "examples/assets/logo.png".into(),
             )]),
-            logo: Sprite::new(SpriteAssets::Logo),
+            logo: SpriteNode::new(SpriteAssets::Logo),
         }
     }
 }
@@ -79,7 +79,7 @@ impl GameNode<SpriteAssets> for LoadingScreen {
 
 struct InGameScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
-    sprites: Vec<Sprite<SpriteAssets>>,
+    sprites: Vec<SpriteNode<SpriteAssets>>,
     velocities: Vec<Vec2>,
 }
 
@@ -93,7 +93,7 @@ impl InGameScreen {
         let window_height = 720.0;
 
         for _ in 0..100_000 {
-            let mut sprite = Sprite::new(SpriteAssets::TestSprite);
+            let mut sprite = SpriteNode::new(SpriteAssets::TestSprite);
 
             let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
             let y = rng.random_range(-window_height / 2.0..window_height / 2.0);

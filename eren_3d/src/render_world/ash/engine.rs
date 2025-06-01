@@ -4,13 +4,13 @@ use crate::game_world::{nodes::game_node::GameNode, state::GameState, transform:
 
 use winit::dpi::PhysicalSize;
 
-pub struct AshEngine2D<R, SA> {
+pub struct AshEngine3D<R, SA> {
     game_state: GameState<SA>,
     root_node: R,
     default_global_transform: GlobalTransform,
 }
 
-impl<R, SA> AshEngine2D<R, SA> {
+impl<R, SA> AshEngine3D<R, SA> {
     pub fn new(root_node: R) -> Self {
         Self {
             game_state: GameState::new(),
@@ -20,7 +20,7 @@ impl<R, SA> AshEngine2D<R, SA> {
     }
 }
 
-impl<R: GameNode<SA>, SA> AshEngine for AshEngine2D<R, SA> {
+impl<R: GameNode<SA>, SA> AshEngine for AshEngine3D<R, SA> {
     fn on_gpu_resources_ready(&mut self) {}
 
     fn on_gpu_resources_lost(&mut self) {}

@@ -3,6 +3,7 @@ use std::{collections::HashMap, hash::Hash};
 use crate::render_world::wgpu::{load_model::load_gltf_model::load_gltf_model, model::Model};
 use wgpu::util::DeviceExt;
 
+#[derive(Clone)]
 pub struct MeshGpuResource {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -10,6 +11,7 @@ pub struct MeshGpuResource {
     pub bind_group: Option<wgpu::BindGroup>,
 }
 
+#[derive(Clone)]
 pub struct ModelGpuResource {
     pub meshes: Vec<MeshGpuResource>,
 }
@@ -18,7 +20,7 @@ pub struct WgpuModelAssetManager<MA> {
     device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
     sampler: Option<wgpu::Sampler>,
-    bind_group_layout: Option<wgpu::BindGroupLayout>,
+    material_bind_group_layout: Option<wgpu::BindGroupLayout>,
 
     loading_assets: Vec<MA>,
     loaded_models: HashMap<MA, Model>,
@@ -32,7 +34,7 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
             device: None,
             queue: None,
             sampler: None,
-            bind_group_layout: None,
+            material_bind_group_layout: None,
 
             loading_assets: Vec::new(),
             loaded_models: HashMap::new(),
@@ -42,23 +44,23 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
     }
 
     fn create_gpu_resource(&mut self, asset: MA, model: &Model) {
-        if let (Some(device), Some(queue), Some(bind_group_layout), Some(sampler)) = (
+        if let (Some(device), Some(queue), Some(material_bind_group_layout), Some(sampler)) = (
             &self.device,
             &self.queue,
-            &self.bind_group_layout,
+            &self.material_bind_group_layout,
             &self.sampler,
         ) {
             let mut mesh_resources = Vec::new();
 
             for mesh in &model.meshes {
                 let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("mesh_vertex_buffer"),
+                    label: Some("mesh vertex buffer"),
                     contents: bytemuck::cast_slice(&mesh.vertices),
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
                 let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("mesh_index_buffer"),
+                    label: Some("mesh index buffer"),
                     contents: bytemuck::cast_slice(&mesh.indices),
                     usage: wgpu::BufferUsages::INDEX,
                 });
@@ -72,7 +74,7 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
                     };
 
                     let texture = device.create_texture(&wgpu::TextureDescriptor {
-                        label: Some("mesh_texture"),
+                        label: Some("material texture"),
                         size,
                         mip_level_count: 1,
                         sample_count: 1,
@@ -94,8 +96,8 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
                     );
 
                     Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("mesh_bind_group"),
-                        layout: bind_group_layout,
+                        label: Some("material bind group"),
+                        layout: material_bind_group_layout,
                         entries: &[
                             wgpu::BindGroupEntry {
                                 binding: 0,
@@ -138,7 +140,7 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
     ) {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
-        self.bind_group_layout = Some(bind_group_layout.clone());
+        self.material_bind_group_layout = Some(bind_group_layout.clone());
 
         self.sampler = Some(device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sprite sampler"),
@@ -165,7 +167,7 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
     pub fn on_gpu_resources_lost(&mut self) {
         self.device = None;
         self.queue = None;
-        self.bind_group_layout = None;
+        self.material_bind_group_layout = None;
         self.sampler = None;
         self.gpu_resources.clear();
     }

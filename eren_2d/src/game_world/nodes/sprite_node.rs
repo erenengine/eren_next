@@ -1,16 +1,17 @@
-use super::{
-    game_node::GameNode,
+use crate::game_world::{
     state::{GameState, RenderRequest},
     transform::{GlobalTransform, LocalTransform},
 };
 
-pub struct Sprite<SA> {
+use super::game_node::GameNode;
+
+pub struct SpriteNode<SA> {
     pub transform: LocalTransform,
     global_transform: GlobalTransform,
     asset_id: SA,
 }
 
-impl<SA> Sprite<SA> {
+impl<SA> SpriteNode<SA> {
     pub fn new(asset_id: SA) -> Self {
         Self {
             transform: LocalTransform::new(),
@@ -20,7 +21,7 @@ impl<SA> Sprite<SA> {
     }
 }
 
-impl<SA: Copy> GameNode<SA> for Sprite<SA> {
+impl<SA: Copy> GameNode<SA> for SpriteNode<SA> {
     fn update(
         &mut self,
         game_state: &mut GameState<SA>,

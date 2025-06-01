@@ -11,7 +11,7 @@ use eren_core::{
 
 use crate::{
     game_world::nodes::game_node::GameNode,
-    render_world::{ash::engine::AshEngine2D, wgpu::engine::WgpuEngine2D},
+    render_world::{ash::engine::AshEngine3D, wgpu::engine::WgpuEngine3D},
 };
 
 pub struct AppConfig {
@@ -32,10 +32,10 @@ impl App {
     ) -> Self {
         let gpu_resource_manager: Box<dyn GpuResourceManager>;
         if config.graphics_library == GraphicsLibrary::Ash {
-            let engine = AshEngine2D::new(root_node);
+            let engine = AshEngine3D::new(root_node);
             gpu_resource_manager = Box::new(AshGpuResourceManager::new(Box::new(engine)));
         } else if config.graphics_library == GraphicsLibrary::Wgpu {
-            let engine = WgpuEngine2D::new(root_node);
+            let engine = WgpuEngine3D::new(root_node);
             gpu_resource_manager = Box::new(WgpuGpuResourceManager::new(Box::new(engine)));
         } else {
             panic!("Invalid graphics library");
