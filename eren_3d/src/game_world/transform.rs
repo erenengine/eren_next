@@ -1,4 +1,4 @@
-use glam::{Quat, Vec3};
+use glam::{Mat4, Quat, Vec3};
 
 pub struct LocalTransform {
     position: Vec3,
@@ -78,9 +78,7 @@ impl LocalTransform {
 }
 
 pub struct GlobalTransform {
-    position: Vec3,
-    scale: Vec3,
-    rotation: Quat,
+    matrix: Mat4,
     alpha: f32,
     is_dirty: bool,
 }
@@ -88,60 +86,36 @@ pub struct GlobalTransform {
 impl GlobalTransform {
     pub fn new() -> Self {
         Self {
-            position: Vec3::ZERO,
-            scale: Vec3::ONE,
-            rotation: Quat::IDENTITY,
+            matrix: Mat4::IDENTITY,
             alpha: 1.0,
             is_dirty: false,
         }
     }
 
-    pub fn position(&self) -> Vec3 {
-        self.position
-    }
-
-    pub fn scale(&self) -> Vec3 {
-        self.scale
-    }
-
-    pub fn rotation(&self) -> Quat {
-        self.rotation
-    }
-
-    pub fn alpha(&self) -> f32 {
-        self.alpha
-    }
-
-    pub fn update(&mut self, parent: &GlobalTransform, local: &LocalTransform) {
+    pub fn update(&mut self, parent: &GlobalTransform, local: &mut LocalTransform) {
         if parent.is_dirty || local.is_dirty {
-            let rx = local.position.x * parent.scale.x;
-            let ry = local.position.y * parent.scale.y;
-            let rz = local.position.z * parent.scale.z;
+            let pivot_transform = Mat4::from_translation(local.pivot)
+                * Mat4::from_quat(local.rotation)
+                * Mat4::from_scale(local.scale)
+                * Mat4::from_translation(-local.pivot);
 
-            let p_cos = parent.rotation.x;
-            let p_sin = parent.rotation.y;
+            let local_matrix =
+                Mat4::from_translation(local.position - local.pivot) * pivot_transform;
 
-            self.scale.x = parent.scale.x * local.scale.x;
-            self.scale.y = parent.scale.y * local.scale.y;
-            self.scale.z = parent.scale.z * local.scale.z;
-
-            let pivot_x = local.pivot.x * self.scale.x;
-            let pivot_y = local.pivot.y * self.scale.y;
-            let pivot_z = local.pivot.z * self.scale.z;
-
-            let cos = local.rotation.x;
-            let sin = local.rotation.y;
-
-            self.position.x =
-                parent.position.x + (rx * p_cos - ry * p_sin) - (pivot_x * cos - pivot_y * sin);
-            self.position.y =
-                parent.position.y + (rx * p_sin + ry * p_cos) - (pivot_x * sin + pivot_y * cos);
-            self.position.z = parent.position.z + (rz * p_cos) - (pivot_z * cos);
-
-            self.rotation = parent.rotation * local.rotation;
+            self.matrix = parent.matrix * local_matrix;
             self.alpha = parent.alpha * local.alpha;
-
             self.is_dirty = true;
+
+            local.is_dirty = false;
         }
+    }
+
+    pub fn finalize(&mut self) {
+        self.is_dirty = false;
+    }
+
+    pub fn extract(&mut self) -> (Mat4, f32) {
+        self.finalize();
+        (self.matrix, self.alpha)
     }
 }

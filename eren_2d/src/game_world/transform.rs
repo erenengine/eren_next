@@ -94,10 +94,13 @@ impl GlobalTransform {
 
     pub fn update(&mut self, parent: &GlobalTransform, local: &mut LocalTransform) {
         if parent.is_dirty || local.is_dirty {
-            let local_matrix = Mat3::from_translation(local.position)
-                * Mat3::from_scale(local.scale)
+            let pivot_transform = Mat3::from_translation(local.pivot)
                 * Mat3::from_angle(local.rotation)
+                * Mat3::from_scale(local.scale)
                 * Mat3::from_translation(-local.pivot);
+
+            let local_matrix =
+                Mat3::from_translation(local.position - local.pivot) * pivot_transform;
 
             self.matrix = parent.matrix * local_matrix;
             self.alpha = parent.alpha * local.alpha;
