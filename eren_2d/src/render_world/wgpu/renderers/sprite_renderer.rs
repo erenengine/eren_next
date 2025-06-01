@@ -100,7 +100,6 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
             pipeline: None,
             quad_vertex_buffer: None,
             quad_index_buffer: None,
-
             screen_info_buffer: None,
             screen_info_bind_group: None,
 
@@ -319,13 +318,10 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
                     old_buffer.destroy();
                 }
 
-                self.instance_buffer_capacity = num_instances.next_power_of_two();
-                if self.instance_buffer_capacity == 0 {
-                    self.instance_buffer_capacity = 16;
-                }
+                self.instance_buffer_capacity = num_instances.next_power_of_two().max(16);
 
                 let new_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("instance buffer"),
+                    label: Some("sprite instance buffer"),
                     size: (self.instance_buffer_capacity * std::mem::size_of::<InstanceData>())
                         as wgpu::BufferAddress,
                     usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,

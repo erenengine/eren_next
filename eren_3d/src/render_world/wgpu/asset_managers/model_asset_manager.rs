@@ -6,7 +6,7 @@ use wgpu::util::DeviceExt;
 pub struct MeshGpuResource {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
-    pub index_count: u32,
+    pub num_indices: u32,
     pub bind_group: Option<wgpu::BindGroup>,
 }
 
@@ -116,7 +116,7 @@ impl<MA: Eq + Hash + Clone> WgpuModelAssetManager<MA> {
                 mesh_resources.push(MeshGpuResource {
                     vertex_buffer,
                     index_buffer,
-                    index_count: mesh.indices.len() as u32,
+                    num_indices: mesh.indices.len() as u32,
                     bind_group,
                 });
             }
