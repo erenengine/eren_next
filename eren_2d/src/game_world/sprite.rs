@@ -28,6 +28,7 @@ impl<SA: Copy> GameNode<SA> for Sprite<SA> {
     ) {
         self.global_transform
             .update(parent_global_transform, &self.local_transform);
+
         game_state.render_requests.push(RenderRequest {
             x: self.global_transform.x(),
             y: self.global_transform.y(),
