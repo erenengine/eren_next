@@ -30,9 +30,7 @@ impl<SA: Copy> GameNode<SA> for Sprite<SA> {
             .update(parent_global_transform, &self.transform);
 
         game_state.render_requests.push(RenderRequest {
-            position: self.global_transform.position(),
-            scale: self.global_transform.scale(),
-            rotation: self.global_transform.rotation(),
+            matrix: self.global_transform.matrix(),
             alpha: self.global_transform.alpha(),
             sprite_asset_id: self.asset_id,
         });

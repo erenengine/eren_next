@@ -1,4 +1,4 @@
-use glam::{Mat2, Vec2};
+use glam::{Mat3, Vec2};
 
 pub struct LocalTransform {
     position: Vec2,
@@ -78,9 +78,7 @@ impl LocalTransform {
 }
 
 pub struct GlobalTransform {
-    position: Vec2,
-    scale: Vec2,
-    rotation: f32,
+    matrix: Mat3,
     alpha: f32,
     is_dirty: bool,
 }
@@ -88,24 +86,14 @@ pub struct GlobalTransform {
 impl GlobalTransform {
     pub fn new() -> Self {
         Self {
-            position: Vec2::ZERO,
-            scale: Vec2::splat(1.0),
-            rotation: 0.0,
+            matrix: Mat3::IDENTITY,
             alpha: 1.0,
             is_dirty: false,
         }
     }
 
-    pub fn position(&self) -> Vec2 {
-        self.position
-    }
-
-    pub fn scale(&self) -> Vec2 {
-        self.scale
-    }
-
-    pub fn rotation(&self) -> f32 {
-        self.rotation
+    pub fn matrix(&self) -> Mat3 {
+        self.matrix
     }
 
     pub fn alpha(&self) -> f32 {
@@ -114,21 +102,12 @@ impl GlobalTransform {
 
     pub fn update(&mut self, parent: &GlobalTransform, local: &LocalTransform) {
         if parent.is_dirty || local.is_dirty {
-            self.scale = parent.scale * local.scale;
-            self.rotation = parent.rotation + local.rotation;
+            let local_matrix = Mat3::from_translation(local.position)
+                * Mat3::from_scale(local.scale)
+                * Mat3::from_angle(local.rotation)
+                * Mat3::from_translation(-local.pivot);
+            self.matrix = parent.matrix * local_matrix;
             self.alpha = parent.alpha * local.alpha;
-
-            let scaled_local_pos = local.position * parent.scale;
-            let parent_rotation_matrix = Mat2::from_angle(parent.rotation);
-            let rotated_scaled_local_pos = parent_rotation_matrix * scaled_local_pos;
-
-            let scaled_pivot = local.pivot * self.scale;
-            let local_rotation_matrix = Mat2::from_angle(local.rotation);
-            let rotated_scaled_pivot_offset = local_rotation_matrix * scaled_pivot;
-
-            self.position =
-                parent.position + rotated_scaled_local_pos - rotated_scaled_pivot_offset;
-
             self.is_dirty = true;
         }
     }

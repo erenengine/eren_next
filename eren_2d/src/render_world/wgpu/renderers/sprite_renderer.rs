@@ -1,4 +1,4 @@
-use glam::Vec2;
+use glam::{Mat3, Vec2};
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
@@ -44,20 +44,18 @@ impl Vertex {
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceData {
-    offset: [f32; 2],
     size: [f32; 2],
-    scale: [f32; 2],
-    rotation: f32,
+    matrix: [[f32; 3]; 3],
     alpha: f32,
 }
 
 impl InstanceData {
     const ATTRIBUTES: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-        2 => Float32x2, // offset
-        3 => Float32x2, // size
-        4 => Float32x2, // scale
-        5 => Float32,   // rotation
-        6 => Float32    // alpha
+        2 => Float32x2,    // size
+        3 => Float32x3,    // matrix.col0 (matrix[0])
+        4 => Float32x3,    // matrix.col1 (matrix[1])
+        5 => Float32x3,    // matrix.col2 (matrix[2])
+        6 => Float32,      // alpha
     ];
 
     fn desc() -> wgpu::VertexBufferLayout<'static> {
@@ -70,10 +68,8 @@ impl InstanceData {
 }
 
 pub struct SpriteRenderCommand<SA> {
-    pub position: Vec2,
     pub size: Vec2,
-    pub scale: Vec2,
-    pub rotation: f32,
+    pub matrix: Mat3,
     pub alpha: f32,
     pub sprite_asset_id: SA,
     pub bind_group: wgpu::BindGroup,
@@ -311,10 +307,8 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
             let instance_data_vec: Vec<InstanceData> = render_commands
                 .iter()
                 .map(|cmd| InstanceData {
-                    offset: [cmd.position.x, cmd.position.y],
                     size: [cmd.size.x, cmd.size.y],
-                    scale: [cmd.scale.x, cmd.scale.y],
-                    rotation: cmd.rotation,
+                    matrix: cmd.matrix.to_cols_array_2d(),
                     alpha: cmd.alpha,
                 })
                 .collect();

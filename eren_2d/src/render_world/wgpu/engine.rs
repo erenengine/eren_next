@@ -103,15 +103,13 @@ where
             let asset_id = render_request.sprite_asset_id;
             let gpu_resource = self.sprite_asset_manager.get_gpu_resource(asset_id);
 
-            if let Some(gpu_resource_ref) = gpu_resource {
+            if let Some(gpu_resource) = gpu_resource {
                 render_commands.push(SpriteRenderCommand {
-                    position: render_request.position,
-                    size: gpu_resource_ref.size,
-                    scale: render_request.scale,
-                    rotation: render_request.rotation,
+                    size: gpu_resource.size,
+                    matrix: render_request.matrix,
                     alpha: render_request.alpha,
                     sprite_asset_id: asset_id,
-                    bind_group: gpu_resource_ref.bind_group.clone(),
+                    bind_group: gpu_resource.bind_group.clone(),
                 });
             }
         }

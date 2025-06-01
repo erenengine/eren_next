@@ -9,10 +9,11 @@ var<uniform> screen: ScreenInfo;
 struct VertexInput {
     @location(0) pos: vec2<f32>,
     @location(1) uv: vec2<f32>,
-    @location(2) offset: vec2<f32>,
-    @location(3) size: vec2<f32>,
-    @location(4) scale: vec2<f32>,
-    @location(5) rotation: f32,
+
+    @location(2) size: vec2<f32>,
+    @location(3) mat0: vec3<f32>,
+    @location(4) mat1: vec3<f32>,
+    @location(5) mat2: vec3<f32>,
     @location(6) alpha: f32,
 };
 
@@ -29,18 +30,19 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     let resolution = screen.resolution;
     let scale_factor = screen.scale_factor;
 
-    let sprite_size = input.size * input.scale * scale_factor;
-    let local_pos = (input.pos - vec2<f32>(0.5, 0.5)) * sprite_size;
+    let local_pos = (input.pos - vec2<f32>(0.5, 0.5)) * input.size;
 
-    let cos_r = cos(input.rotation);
-    let sin_r = sin(input.rotation);
-    let rotated = vec2<f32>(
-        local_pos.x * cos_r - local_pos.y * sin_r,
-        -(local_pos.x * sin_r + local_pos.y * cos_r)
+    let local = vec3<f32>(local_pos, 1.0);
+
+    let mat = mat3x3<f32>(
+        input.mat0,
+        input.mat1,
+        input.mat2,
     );
+    let world = mat * local;
 
-    let world_pos = rotated + input.offset * scale_factor;
-    let pos_ndc = (world_pos / resolution) * 2.0;
+    let world_scaled = world.xy * scale_factor;
+    let pos_ndc = (world_scaled / resolution) * 2.0;
     let ndc_final = vec2<f32>(pos_ndc.x, -pos_ndc.y);
 
     out.position = vec4<f32>(ndc_final, 0.0, 1.0);
