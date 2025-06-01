@@ -46,7 +46,7 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     let ndc_final = vec2<f32>(pos_ndc.x, -pos_ndc.y);
 
     out.position = vec4<f32>(ndc_final, 0.0, 1.0);
-    out.frag_uv = input.uv;
+    out.frag_uv = vec2<f32>(input.uv.x, 1.0 - input.uv.y);
     out.frag_alpha = input.alpha;
     return out;
 }
