@@ -107,8 +107,12 @@ impl GlobalTransform {
         }
     }
 
-    pub fn extract(&mut self) -> (Mat3, f32) {
+    pub fn finalize(&mut self) {
         self.is_dirty = false;
+    }
+
+    pub fn extract(&mut self) -> (Mat3, f32) {
+        self.finalize();
         (self.matrix, self.alpha)
     }
 }
