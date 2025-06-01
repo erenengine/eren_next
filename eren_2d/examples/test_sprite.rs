@@ -85,8 +85,8 @@ struct InGameScreen {
 
 impl InGameScreen {
     pub fn new() -> Self {
-        let mut sprites = Vec::with_capacity(10_000);
-        let mut velocities = Vec::with_capacity(10_000);
+        let mut sprites: Vec<SpriteNode<SpriteAssets>> = Vec::with_capacity(100_000);
+        let mut velocities = Vec::with_capacity(100_000);
         let mut rng = rand::rng();
 
         let window_width = 1280.0;
