@@ -34,7 +34,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
         }
     }
 
-    fn create_bind_group(&mut self, asset: SA, image: &image::RgbaImage) {
+    fn create_gpu_resource(&mut self, asset: SA, image: &image::RgbaImage) {
         if let (Some(device), Some(queue), Some(bind_group_layout), Some(sampler)) = (
             &self.device,
             &self.queue,
@@ -123,7 +123,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
             .collect();
 
         for (asset, image) in images {
-            self.create_bind_group(asset, &image);
+            self.create_gpu_resource(asset, &image);
         }
     }
 
@@ -138,7 +138,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
     pub fn load_sprite(&mut self, asset: SA, path: String) {
         let image = image::open(path.clone()).unwrap().to_rgba8();
         self.loaded_images.insert(asset.clone(), image.clone());
-        self.create_bind_group(asset, &image);
+        self.create_gpu_resource(asset, &image);
     }
 
     pub fn get_gpu_resource(&self, asset: SA) -> Option<&SpriteGpuResource> {
