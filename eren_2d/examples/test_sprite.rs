@@ -105,7 +105,15 @@ impl InGameScreen {
         for _ in 0..100_000 {
             let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
             let y = rng.random_range(-window_height / 2.0..window_height / 2.0);
-            sprites.push(Sprite::new(x, y, SpriteAssets::TestSprite));
+
+            let mut sprite = Sprite::new(x, y, SpriteAssets::TestSprite);
+            let scale = rng.random_range(0.5..2.0);
+            sprite.local_transform.set_scale(scale, scale);
+            sprite
+                .local_transform
+                .set_rotation(rng.random_range(0.0..2.0 * std::f32::consts::PI));
+            sprite.local_transform.set_alpha(rng.random_range(0.0..1.0));
+            sprites.push(sprite);
 
             let vx = rng.random_range(-2000.0..2000.0);
             let vy = rng.random_range(-2000.0..2000.0);

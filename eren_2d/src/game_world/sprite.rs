@@ -1,7 +1,7 @@
 use super::{
+    game_node::GameNode,
     state::{GameState, RenderRequest},
     transform::{GlobalTransform, LocalTransform},
-    game_node::GameNode,
 };
 
 pub struct Sprite<SA> {
@@ -31,6 +31,10 @@ impl<SA: Copy> GameNode<SA> for Sprite<SA> {
         game_state.render_requests.push(RenderRequest {
             x: self.global_transform.x(),
             y: self.global_transform.y(),
+            scale_x: self.global_transform.scale_x(),
+            scale_y: self.global_transform.scale_y(),
+            rotation: self.global_transform.rotation(),
+            alpha: self.global_transform.alpha(),
             sprite_asset_id: self.asset_id,
         });
     }

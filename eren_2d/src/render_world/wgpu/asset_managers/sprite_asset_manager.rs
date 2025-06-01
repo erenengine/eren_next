@@ -1,19 +1,21 @@
 use std::{collections::HashMap, hash::Hash};
 
-#[derive(Clone)]
-pub struct WgpuTexture {
-    pub view: wgpu::TextureView,
+pub struct SpriteGpuResource {
     pub width: u32,
     pub height: u32,
+    pub bind_group: wgpu::BindGroup,
 }
 
 pub struct WgpuSpriteAssetManager<SA> {
     device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
+    bind_group_layout: Option<wgpu::BindGroupLayout>,
+    sampler: Option<wgpu::Sampler>,
 
     loading_assets: Vec<SA>,
     loaded_images: HashMap<SA, image::RgbaImage>,
-    textures: HashMap<SA, WgpuTexture>,
+
+    gpu_resources: HashMap<SA, SpriteGpuResource>,
 }
 
 impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
@@ -21,15 +23,23 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
         Self {
             device: None,
             queue: None,
+            bind_group_layout: None,
+            sampler: None,
 
             loading_assets: Vec::new(),
             loaded_images: HashMap::new(),
-            textures: HashMap::new(),
+
+            gpu_resources: HashMap::new(),
         }
     }
 
-    fn upload_texture(&mut self, asset: SA, image: &image::RgbaImage) {
-        if let (Some(device), Some(queue)) = (&self.device, &self.queue) {
+    fn create_bind_group(&mut self, asset: SA, image: &image::RgbaImage) {
+        if let (Some(device), Some(queue), Some(bind_group_layout), Some(sampler)) = (
+            &self.device,
+            &self.queue,
+            &self.bind_group_layout,
+            &self.sampler,
+        ) {
             let (width, height) = image.dimensions();
             let size = wgpu::Extent3d {
                 width,
@@ -48,15 +58,6 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
                 view_formats: &[],
             });
 
-            self.textures.insert(
-                asset,
-                WgpuTexture {
-                    view: texture.create_view(&Default::default()),
-                    width,
-                    height,
-                },
-            );
-
             queue.write_texture(
                 texture.as_image_copy(),
                 image,
@@ -67,12 +68,53 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
                 },
                 size,
             );
+
+            self.gpu_resources.insert(
+                asset,
+                SpriteGpuResource {
+                    width,
+                    height,
+                    bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("sprite bind group"),
+                        layout: bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(
+                                    &texture.create_view(&Default::default()),
+                                ),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(sampler),
+                            },
+                        ],
+                    }),
+                },
+            );
         }
     }
 
-    pub fn on_gpu_resources_ready(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    pub fn on_gpu_resources_ready(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) {
         self.device = Some(device.clone());
         self.queue = Some(queue.clone());
+        self.bind_group_layout = Some(bind_group_layout.clone());
+
+        self.sampler = Some(device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("sprite sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        }));
 
         let images: Vec<(SA, image::RgbaImage)> = self
             .loaded_images
@@ -81,23 +123,25 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
             .collect();
 
         for (asset, image) in images {
-            self.upload_texture(asset, &image);
+            self.create_bind_group(asset, &image);
         }
     }
 
     pub fn on_gpu_resources_lost(&mut self) {
         self.device = None;
         self.queue = None;
-        self.textures.clear();
+        self.bind_group_layout = None;
+        self.sampler = None;
+        self.gpu_resources.clear();
     }
 
     pub fn load_sprite(&mut self, asset: SA, path: String) {
         let image = image::open(path.clone()).unwrap().to_rgba8();
         self.loaded_images.insert(asset.clone(), image.clone());
-        self.upload_texture(asset, &image);
+        self.create_bind_group(asset, &image);
     }
 
-    pub fn get_texture(&self, asset: SA) -> Option<&WgpuTexture> {
-        self.textures.get(&asset)
+    pub fn get_gpu_resource(&self, asset: SA) -> Option<&SpriteGpuResource> {
+        self.gpu_resources.get(&asset)
     }
 }

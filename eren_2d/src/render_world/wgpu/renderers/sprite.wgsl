@@ -11,11 +11,15 @@ struct VertexInput {
     @location(1) uv: vec2<f32>,
     @location(2) offset: vec2<f32>,
     @location(3) size: vec2<f32>,
+    @location(4) scale: vec2<f32>,
+    @location(5) rotation: f32,
+    @location(6) alpha: f32,
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) frag_uv: vec2<f32>,
+    @location(1) frag_alpha: f32,
 };
 
 @vertex
@@ -25,17 +29,23 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     let resolution = screen.resolution;
     let scale_factor = screen.scale_factor;
 
-    let physical_sprite_size = input.size * scale_factor;
-    let quad_pos_pixels = input.pos * physical_sprite_size;
+    let sprite_size = input.size * input.scale * scale_factor;
+    let local_pos = (input.pos - vec2<f32>(0.5, 0.5)) * sprite_size;
 
-    let pos_ndc = quad_pos_pixels / resolution * 2.0;
-    let offset_ndc = vec2<f32>(
-        (input.offset.x / resolution.x * scale_factor) * 2.0,
-        -(input.offset.y / resolution.y * scale_factor) * 2.0
+    let cos_r = cos(input.rotation);
+    let sin_r = sin(input.rotation);
+    let rotated = vec2<f32>(
+        local_pos.x * cos_r - local_pos.y * sin_r,
+        -(local_pos.x * sin_r + local_pos.y * cos_r)
     );
 
-    out.position = vec4<f32>(offset_ndc + pos_ndc, 0.0, 1.0);
+    let world_pos = rotated + input.offset * scale_factor;
+    let pos_ndc = (world_pos / resolution) * 2.0;
+    let ndc_final = vec2<f32>(pos_ndc.x, -pos_ndc.y);
+
+    out.position = vec4<f32>(ndc_final, 0.0, 1.0);
     out.frag_uv = input.uv;
+    out.frag_alpha = input.alpha;
     return out;
 }
 
@@ -44,5 +54,6 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return textureSample(sprite_texture, sprite_sampler, in.frag_uv);
+    let color = textureSample(sprite_texture, sprite_sampler, in.frag_uv);
+    return vec4<f32>(color.rgb, color.a * in.frag_alpha);
 }
