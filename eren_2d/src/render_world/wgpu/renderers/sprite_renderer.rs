@@ -1,3 +1,4 @@
+use glam::Vec2;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
@@ -69,12 +70,9 @@ impl InstanceData {
 }
 
 pub struct SpriteRenderCommand<SA> {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub scale_x: f32,
-    pub scale_y: f32,
+    pub position: Vec2,
+    pub size: Vec2,
+    pub scale: Vec2,
     pub rotation: f32,
     pub alpha: f32,
     pub sprite_asset_id: SA,
@@ -313,9 +311,9 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
             let instance_data_vec: Vec<InstanceData> = render_commands
                 .iter()
                 .map(|cmd| InstanceData {
-                    offset: [cmd.x, cmd.y],
-                    size: [cmd.width as f32, cmd.height as f32],
-                    scale: [cmd.scale_x, cmd.scale_y],
+                    offset: [cmd.position.x, cmd.position.y],
+                    size: [cmd.size.x, cmd.size.y],
+                    scale: [cmd.scale.x, cmd.scale.y],
                     rotation: cmd.rotation,
                     alpha: cmd.alpha,
                 })

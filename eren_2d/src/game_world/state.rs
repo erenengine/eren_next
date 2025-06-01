@@ -1,11 +1,10 @@
 use eren_core::game_world::state::{assets::AssetsState, input::InputState};
+use glam::Vec2;
 use winit::dpi::PhysicalSize;
 
 pub struct RenderRequest<SA> {
-    pub x: f32,
-    pub y: f32,
-    pub scale_x: f32,
-    pub scale_y: f32,
+    pub position: Vec2,
+    pub scale: Vec2,
     pub rotation: f32,
     pub alpha: f32,
     pub sprite_asset_id: SA,

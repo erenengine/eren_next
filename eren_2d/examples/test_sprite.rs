@@ -6,6 +6,7 @@ use eren_2d::{
     },
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
+use glam::Vec2;
 use rand::Rng;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -76,17 +77,6 @@ impl GameNode<SpriteAssets> for LoadingScreen {
     }
 }
 
-struct Vec2 {
-    x: f32,
-    y: f32,
-}
-
-impl Vec2 {
-    pub fn new(x: f32, y: f32) -> Self {
-        Self { x, y }
-    }
-}
-
 struct InGameScreen {
     asset_bundle: AssetBundle<SpriteAssets>,
     sprites: Vec<Sprite<SpriteAssets>>,
@@ -108,11 +98,11 @@ impl InGameScreen {
 
             let mut sprite = Sprite::new(x, y, SpriteAssets::TestSprite);
             let scale = rng.random_range(0.5..2.0);
-            sprite.local_transform.set_scale(scale, scale);
+            sprite.transform.set_scale(Vec2::splat(scale));
             sprite
-                .local_transform
+                .transform
                 .set_rotation(rng.random_range(0.0..2.0 * std::f32::consts::PI));
-            sprite.local_transform.set_alpha(rng.random_range(0.0..1.0));
+            sprite.transform.set_alpha(rng.random_range(0.0..1.0));
             sprites.push(sprite);
 
             let vx = rng.random_range(-2000.0..2000.0);
@@ -152,13 +142,13 @@ impl GameNode<SpriteAssets> for InGameScreen {
             let half_size = Vec2::new(32.0, 32.0);
 
             for (sprite, velocity) in self.sprites.iter_mut().zip(self.velocities.iter_mut()) {
-                sprite.local_transform.set_position(
-                    sprite.local_transform.x() + velocity.x * dt,
-                    sprite.local_transform.y() + velocity.y * dt,
-                );
+                sprite.transform.set_position(Vec2::new(
+                    sprite.transform.position().x + velocity.x * dt,
+                    sprite.transform.position().y + velocity.y * dt,
+                ));
 
-                let sprite_screen_x = sprite.local_transform.x() + half_screen.x;
-                let sprite_screen_y = sprite.local_transform.y() + half_screen.y;
+                let sprite_screen_x = sprite.transform.position().x + half_screen.x;
+                let sprite_screen_y = sprite.transform.position().y + half_screen.y;
 
                 if sprite_screen_x < half_size.x || sprite_screen_x > screen.x - half_size.x {
                     velocity.x *= -1.0;

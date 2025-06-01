@@ -1,8 +1,9 @@
 use std::{collections::HashMap, hash::Hash};
 
+use glam::Vec2;
+
 pub struct SpriteGpuResource {
-    pub width: u32,
-    pub height: u32,
+    pub size: Vec2,
     pub bind_group: wgpu::BindGroup,
 }
 
@@ -72,8 +73,7 @@ impl<SA: Eq + Hash + Clone> WgpuSpriteAssetManager<SA> {
             self.gpu_resources.insert(
                 asset,
                 SpriteGpuResource {
-                    width,
-                    height,
+                    size: Vec2::new(width as f32, height as f32),
                     bind_group: device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("sprite bind group"),
                         layout: bind_group_layout,

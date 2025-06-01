@@ -105,12 +105,9 @@ where
 
             if let Some(gpu_resource_ref) = gpu_resource {
                 render_commands.push(SpriteRenderCommand {
-                    x: render_request.x,
-                    y: render_request.y,
-                    width: gpu_resource_ref.width as f32,
-                    height: gpu_resource_ref.height as f32,
-                    scale_x: render_request.scale_x,
-                    scale_y: render_request.scale_y,
+                    position: render_request.position,
+                    size: gpu_resource_ref.size,
+                    scale: render_request.scale,
                     rotation: render_request.rotation,
                     alpha: render_request.alpha,
                     sprite_asset_id: asset_id,
