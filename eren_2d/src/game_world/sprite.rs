@@ -27,11 +27,13 @@ impl<SA: Copy> GameNode<SA> for Sprite<SA> {
         parent_global_transform: &GlobalTransform,
     ) {
         self.global_transform
-            .update(parent_global_transform, &self.transform);
+            .update(parent_global_transform, &mut self.transform);
+
+        let (matrix, alpha) = self.global_transform.extract();
 
         game_state.render_requests.push(RenderRequest {
-            matrix: self.global_transform.matrix(),
-            alpha: self.global_transform.alpha(),
+            matrix,
+            alpha,
             sprite_asset_id: self.asset_id,
         });
     }
