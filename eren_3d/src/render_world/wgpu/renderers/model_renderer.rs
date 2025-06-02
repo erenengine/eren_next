@@ -6,7 +6,7 @@ use winit::dpi::PhysicalSize;
 
 const MODEL_SHADER: &str = include_str!("model.wgsl");
 
-const BASE_COLOR: wgpu::Color = wgpu::Color {
+const BASE_CLEAR_COLOR: wgpu::Color = wgpu::Color {
     r: 0.1,
     g: 0.2,
     b: 0.3,
@@ -277,7 +277,7 @@ impl<MA: PartialEq + Copy> WgpuModelRenderer<MA> {
                 view: surface_texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(BASE_COLOR),
+                    load: wgpu::LoadOp::Clear(BASE_CLEAR_COLOR),
                     store: wgpu::StoreOp::Store,
                 },
             })],

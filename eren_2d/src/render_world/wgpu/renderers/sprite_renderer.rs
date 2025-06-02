@@ -4,7 +4,7 @@ use winit::dpi::PhysicalSize;
 
 const SPRITE_SHADER: &str = include_str!("sprite.wgsl");
 
-const BASE_COLOR: wgpu::Color = wgpu::Color {
+const BASE_CLEAR_COLOR: wgpu::Color = wgpu::Color {
     r: 0.1,
     g: 0.2,
     b: 0.3,
@@ -32,7 +32,7 @@ impl Vertex {
         1 => Float32x2  // uv
     ];
 
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
+    fn description() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -58,7 +58,7 @@ impl InstanceData {
         6 => Float32,      // alpha
     ];
 
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
+    fn description() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<InstanceData>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -175,7 +175,7 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main".into(),
-                buffers: &[Vertex::desc(), InstanceData::desc()],
+                buffers: &[Vertex::description(), InstanceData::description()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -275,7 +275,7 @@ impl<SA: PartialEq + Copy> WgpuSpriteRenderer<SA> {
                 view: surface_texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(BASE_COLOR),
+                    load: wgpu::LoadOp::Clear(BASE_CLEAR_COLOR),
                     store: wgpu::StoreOp::Store,
                 },
             })],
