@@ -134,19 +134,20 @@ fn create_buffer<T: bytemuck::Pod>(
 }
 
 pub struct AshSpriteRenderer<SA> {
-    device: ash::Device,
+    device: Option<ash::Device>,
 
-    phys_mem_props: vk::PhysicalDeviceMemoryProperties,
-    pipeline_layout: vk::PipelineLayout,
-    pipeline: vk::Pipeline,
-    render_pass: vk::RenderPass,
-    descriptor_pool: vk::DescriptorPool,
-    screen_info_descriptor_set: vk::DescriptorSet,
+    phys_mem_props: Option<vk::PhysicalDeviceMemoryProperties>,
+    pipeline_layout: Option<vk::PipelineLayout>,
+    pipeline: Option<vk::Pipeline>,
+    render_pass: Option<vk::RenderPass>,
+    descriptor_pool: Option<vk::DescriptorPool>,
+    screen_info_descriptor_set: Option<vk::DescriptorSet>,
 
-    quad_vbuffer: BufferResource,
-    quad_ibuffer: BufferResource,
+    quad_vbuffer: Option<BufferResource>,
+    quad_ibuffer: Option<BufferResource>,
 
-    screen_info_buffer: BufferResource,
+    screen_info_buffer: Option<BufferResource>,
+
     instance_buffer: Option<BufferResource>,
     instance_capacity: usize,
 
@@ -154,7 +155,30 @@ pub struct AshSpriteRenderer<SA> {
 }
 
 impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
-    pub fn new(
+    pub fn new() -> Self {
+        Self {
+            device: None,
+            phys_mem_props: None,
+            pipeline_layout: None,
+            pipeline: None,
+            render_pass: None,
+            descriptor_pool: None,
+            screen_info_descriptor_set: None,
+
+            quad_vbuffer: None,
+            quad_ibuffer: None,
+
+            screen_info_buffer: None,
+
+            instance_buffer: None,
+            instance_capacity: 0,
+
+            phantom: PhantomData,
+        }
+    }
+
+    pub fn on_gpu_resources_ready(
+        &mut self,
         instance: &ash::Instance,
         phys_device: vk::PhysicalDevice,
         device: ash::Device,
@@ -162,7 +186,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         sprite_set_layout: vk::DescriptorSetLayout,
         window_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
-    ) -> Self {
+    ) {
         let phys_mem_props = unsafe { instance.get_physical_device_memory_properties(phys_device) };
 
         let screen_info_cpu = ScreenInfo {
@@ -429,45 +453,44 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             device.destroy_shader_module(fs_module, None);
         }
 
-        Self {
-            device,
-            phys_mem_props,
-            pipeline_layout,
-            pipeline,
-            render_pass,
-            descriptor_pool,
-            screen_info_descriptor_set,
-            quad_vbuffer,
-            quad_ibuffer,
-            screen_info_buffer,
-            instance_buffer: None,
-            instance_capacity: 0,
-            phantom: PhantomData,
-        }
+        self.device = Some(device);
+
+        self.phys_mem_props = Some(phys_mem_props);
+        self.pipeline_layout = Some(pipeline_layout);
+        self.pipeline = Some(pipeline);
+        self.render_pass = Some(render_pass);
+        self.descriptor_pool = Some(descriptor_pool);
+        self.screen_info_descriptor_set = Some(screen_info_descriptor_set);
+
+        self.quad_vbuffer = Some(quad_vbuffer);
+        self.quad_ibuffer = Some(quad_ibuffer);
+
+        self.screen_info_buffer = Some(screen_info_buffer);
     }
 
     pub fn on_window_resized(&self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
-        let new_info = ScreenInfo {
-            resolution: [new_size.width as f32, new_size.height as f32],
-            scale_factor: scale_factor as f32,
-            _padding: 0.0,
-        };
-        unsafe {
-            let ptr = self
-                .device
-                .map_memory(
-                    self.screen_info_buffer.memory,
-                    0,
-                    self.screen_info_buffer.size,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .unwrap();
-            std::ptr::copy_nonoverlapping(
-                &new_info as *const _ as *const u8,
-                ptr as *mut u8,
-                std::mem::size_of::<ScreenInfo>(),
-            );
-            self.device.unmap_memory(self.screen_info_buffer.memory);
+        if let (Some(device), Some(screen_info_buffer)) = (&self.device, &self.screen_info_buffer) {
+            let new_info = ScreenInfo {
+                resolution: [new_size.width as f32, new_size.height as f32],
+                scale_factor: scale_factor as f32,
+                _padding: 0.0,
+            };
+            unsafe {
+                let ptr = device
+                    .map_memory(
+                        screen_info_buffer.memory,
+                        0,
+                        screen_info_buffer.size,
+                        vk::MemoryMapFlags::empty(),
+                    )
+                    .unwrap();
+                std::ptr::copy_nonoverlapping(
+                    &new_info as *const _ as *const u8,
+                    ptr as *mut u8,
+                    std::mem::size_of::<ScreenInfo>(),
+                );
+                device.unmap_memory(screen_info_buffer.memory);
+            }
         }
     }
 
@@ -484,161 +507,187 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             return;
         }
 
-        if commands.len() > self.instance_capacity {
-            if let Some(old) = self.instance_buffer.take() {
-                old.destroy(&self.device);
-            }
-            self.instance_capacity = commands.len().next_power_of_two().max(16);
-            self.instance_buffer = Some(create_buffer::<InstanceData>(
-                &self.device,
-                &self.phys_mem_props,
-                None,
-                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-                MemoryLocation::GpuOnly,
-            ));
-        }
-
-        let instance_buf = self.instance_buffer.as_ref().unwrap();
-
-        // Upload per‑sprite instance data via a staging buffer
-        let instance_data: Vec<InstanceData> = commands
-            .iter()
-            .map(|cmd| InstanceData {
-                size: [cmd.size.x, cmd.size.y],
-                matrix: cmd.matrix.to_cols_array_2d(),
-                alpha: cmd.alpha,
-            })
-            .collect();
-
-        let staging = create_buffer(
+        if let (
+            Some(device),
+            Some(phys_mem_props),
+            Some(pipeline_layout),
+            Some(pipeline),
+            Some(screen_info_descriptor_set),
+            Some(quad_vbuffer),
+            Some(quad_ibuffer),
+            Some(render_pass),
+        ) = (
             &self.device,
             &self.phys_mem_props,
-            Some(&instance_data),
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
-        );
+            &self.pipeline_layout,
+            &self.pipeline,
+            &self.screen_info_descriptor_set,
+            &self.quad_vbuffer,
+            &self.quad_ibuffer,
+            &self.render_pass,
+        ) {
+            if commands.len() > self.instance_capacity {
+                if let Some(old) = self.instance_buffer.take() {
+                    old.destroy(&device);
+                }
+                self.instance_capacity = commands.len().next_power_of_two().max(16);
+                self.instance_buffer = Some(create_buffer::<InstanceData>(
+                    &device,
+                    &phys_mem_props,
+                    None,
+                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    MemoryLocation::GpuOnly,
+                ));
+            }
 
-        // Record copy cmd (caller provided CB is already begun)
-        let copy_region = vk::BufferCopy {
-            src_offset: 0,
-            dst_offset: 0,
-            size: staging.size,
-        };
-        unsafe {
-            self.device
-                .cmd_copy_buffer(cb, staging.buffer, instance_buf.buffer, &[copy_region])
-        };
+            let instance_buf = self.instance_buffer.as_ref().unwrap();
 
-        // We rely on pipeline barrier outside (usually automatic via synchronisation‑graph)
+            // Upload per‑sprite instance data via a staging buffer
+            let instance_data: Vec<InstanceData> = commands
+                .iter()
+                .map(|cmd| InstanceData {
+                    size: [cmd.size.x, cmd.size.y],
+                    matrix: cmd.matrix.to_cols_array_2d(),
+                    alpha: cmd.alpha,
+                })
+                .collect();
 
-        let rp_begin = vk::RenderPassBeginInfo::default()
-            .render_pass(self.render_pass)
-            .framebuffer(framebuffer)
-            .render_area(render_area)
-            .clear_values(std::slice::from_ref(&BASE_CLEAR_COLOR));
-
-        unsafe {
-            self.device
-                .cmd_begin_render_pass(cb, &rp_begin, vk::SubpassContents::INLINE)
-        };
-
-        unsafe {
-            self.device
-                .cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
-            self.device.cmd_bind_descriptor_sets(
-                cb,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
-                0,
-                &[self.screen_info_descriptor_set],
-                &[],
+            let staging = create_buffer(
+                &device,
+                &phys_mem_props,
+                Some(&instance_data),
+                vk::BufferUsageFlags::TRANSFER_SRC,
+                MemoryLocation::CpuToGpu,
             );
-            self.device
-                .cmd_bind_vertex_buffers(cb, 0, &[self.quad_vbuffer.buffer], &[0]);
-            self.device
-                .cmd_bind_vertex_buffers(cb, 1, &[instance_buf.buffer], &[0]);
-            self.device.cmd_bind_index_buffer(
-                cb,
-                self.quad_ibuffer.buffer,
-                0,
-                vk::IndexType::UINT16,
-            );
-            self.device.cmd_set_viewport(cb, 0, &[viewport]);
-            self.device.cmd_set_scissor(cb, 0, &[scissor]);
-        }
 
-        let mut current_set: Option<vk::DescriptorSet> = None;
-        let mut batch_start = 0u32;
+            // Record copy cmd (caller provided CB is already begun)
+            let copy_region = vk::BufferCopy {
+                src_offset: 0,
+                dst_offset: 0,
+                size: staging.size,
+            };
+            unsafe {
+                device.cmd_copy_buffer(cb, staging.buffer, instance_buf.buffer, &[copy_region])
+            };
 
-        for (i, cmd) in commands.iter().enumerate() {
-            if current_set != Some(cmd.descriptor_set) {
-                // flush previous batch
-                if i as u32 > batch_start {
+            // We rely on pipeline barrier outside (usually automatic via synchronisation‑graph)
+
+            let rp_begin = vk::RenderPassBeginInfo::default()
+                .render_pass(*render_pass)
+                .framebuffer(framebuffer)
+                .render_area(render_area)
+                .clear_values(std::slice::from_ref(&BASE_CLEAR_COLOR));
+
+            unsafe { device.cmd_begin_render_pass(cb, &rp_begin, vk::SubpassContents::INLINE) };
+
+            unsafe {
+                device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, *pipeline);
+                device.cmd_bind_descriptor_sets(
+                    cb,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *pipeline_layout,
+                    0,
+                    &[*screen_info_descriptor_set],
+                    &[],
+                );
+                device.cmd_bind_vertex_buffers(cb, 0, &[quad_vbuffer.buffer], &[0]);
+                device.cmd_bind_vertex_buffers(cb, 1, &[instance_buf.buffer], &[0]);
+                device.cmd_bind_index_buffer(cb, quad_ibuffer.buffer, 0, vk::IndexType::UINT16);
+                device.cmd_set_viewport(cb, 0, &[viewport]);
+                device.cmd_set_scissor(cb, 0, &[scissor]);
+            }
+
+            let mut current_set: Option<vk::DescriptorSet> = None;
+            let mut batch_start = 0u32;
+
+            for (i, cmd) in commands.iter().enumerate() {
+                if current_set != Some(cmd.descriptor_set) {
+                    // flush previous batch
+                    if i as u32 > batch_start {
+                        unsafe {
+                            device.cmd_draw_indexed(
+                                cb,
+                                6,
+                                i as u32 - batch_start,
+                                0,
+                                0,
+                                batch_start,
+                            );
+                        }
+                    }
+                    // bind new descriptor set (set = 1)
                     unsafe {
-                        self.device.cmd_draw_indexed(
+                        device.cmd_bind_descriptor_sets(
                             cb,
-                            6,
-                            i as u32 - batch_start,
-                            0,
-                            0,
-                            batch_start,
+                            vk::PipelineBindPoint::GRAPHICS,
+                            *pipeline_layout,
+                            1,
+                            &[cmd.descriptor_set],
+                            &[],
                         );
                     }
+                    current_set = Some(cmd.descriptor_set);
+                    batch_start = i as u32;
                 }
-                // bind new descriptor set (set = 1)
-                unsafe {
-                    self.device.cmd_bind_descriptor_sets(
-                        cb,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.pipeline_layout,
-                        1,
-                        &[cmd.descriptor_set],
-                        &[],
-                    );
-                }
-                current_set = Some(cmd.descriptor_set);
-                batch_start = i as u32;
             }
+
+            // flush final batch
+            if commands.len() as u32 > batch_start {
+                unsafe {
+                    device.cmd_draw_indexed(
+                        cb,
+                        6,
+                        commands.len() as u32 - batch_start,
+                        0,
+                        0,
+                        batch_start,
+                    )
+                };
+            }
+
+            unsafe { device.cmd_end_render_pass(cb) };
+
+            // Staging buffer cleaned up after submit, caller responsibility (or you can integrate
+            // an arena/allocator).  For brevity we just destroy now (requires host‑idle)
+            staging.destroy(&device);
         }
-
-        // flush final batch
-        if commands.len() as u32 > batch_start {
-            unsafe {
-                self.device.cmd_draw_indexed(
-                    cb,
-                    6,
-                    commands.len() as u32 - batch_start,
-                    0,
-                    0,
-                    batch_start,
-                )
-            };
-        }
-
-        unsafe { self.device.cmd_end_render_pass(cb) };
-
-        // Staging buffer cleaned up after submit, caller responsibility (or you can integrate
-        // an arena/allocator).  For brevity we just destroy now (requires host‑idle)
-        staging.destroy(&self.device);
     }
 }
 
 impl<SA> Drop for AshSpriteRenderer<SA> {
     fn drop(&mut self) {
-        unsafe {
-            if let Some(inst_buf) = self.instance_buffer.take() {
-                inst_buf.destroy(&self.device);
-            }
-            self.quad_vbuffer.destroy(&self.device);
-            self.quad_ibuffer.destroy(&self.device);
-            self.screen_info_buffer.destroy(&self.device);
+        if let (
+            Some(device),
+            Some(screen_info_buffer),
+            Some(pipeline_layout),
+            Some(pipeline),
+            Some(quad_vbuffer),
+            Some(quad_ibuffer),
+            Some(render_pass),
+            Some(descriptor_pool),
+        ) = (
+            &self.device,
+            &self.screen_info_buffer,
+            &self.pipeline_layout,
+            &self.pipeline,
+            &self.quad_vbuffer,
+            &self.quad_ibuffer,
+            &self.render_pass,
+            &self.descriptor_pool,
+        ) {
+            unsafe {
+                if let Some(inst_buf) = self.instance_buffer.take() {
+                    inst_buf.destroy(&device);
+                }
+                quad_vbuffer.destroy(&device);
+                quad_ibuffer.destroy(&device);
+                screen_info_buffer.destroy(&device);
 
-            self.device.destroy_pipeline(self.pipeline, None);
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_render_pass(self.render_pass, None);
-            self.device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
+                device.destroy_pipeline(*pipeline, None);
+                device.destroy_pipeline_layout(*pipeline_layout, None);
+                device.destroy_render_pass(*render_pass, None);
+                device.destroy_descriptor_pool(*descriptor_pool, None);
+            }
         }
     }
 }
