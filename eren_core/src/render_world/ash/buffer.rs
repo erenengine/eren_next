@@ -19,11 +19,7 @@ impl BufferResource {
     pub fn destroy(&self, device: &Device) {
         unsafe {
             if self.mapped_ptr.is_some() {
-                // Only unmap if it was intended to be persistently mapped.
-                // Staging buffers might map, copy, then unmap immediately.
-                // This simple destroy assumes if mapped_ptr is Some, it needs unmapping.
-                // A more robust system might track mapping state.
-                // device.unmap_memory(self.memory); // This might be problematic if already unmapped
+                device.unmap_memory(self.memory);
             }
             device.destroy_buffer(self.buffer, None);
             device.free_memory(self.memory, None);

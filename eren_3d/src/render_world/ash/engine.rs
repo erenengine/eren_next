@@ -31,7 +31,7 @@ impl<R: GameNode<SA>, SA> AshEngine for AshEngine3D<R, SA> {
         command_pool: vk::CommandPool,
         swapchain_format: vk::Format,
         render_pass: vk::RenderPass,
-        // Framebuffers are implicitly known via image_index and what renderer holds
+        swapchain_framebuffers: Vec<vk::Framebuffer>,
         window_size: PhysicalSize<u32>,
         scale_factor: f64,
         max_sprites: u32,
@@ -61,4 +61,6 @@ impl<R: GameNode<SA>, SA> AshEngine for AshEngine3D<R, SA> {
                                     // and render_area/viewport from its internal state or window_size.
     ) {
     }
+
+    fn set_swapchain_framebuffers(&mut self, _: Vec<vk::Framebuffer>) {}
 }

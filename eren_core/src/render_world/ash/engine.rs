@@ -11,7 +11,7 @@ pub trait AshEngine {
         command_pool: vk::CommandPool,
         swapchain_format: vk::Format,
         render_pass: vk::RenderPass,
-        // Framebuffers are implicitly known via image_index and what renderer holds
+        swapchain_framebuffers: Vec<vk::Framebuffer>,
         window_size: PhysicalSize<u32>,
         scale_factor: f64,
         max_sprites: u32,
@@ -35,4 +35,5 @@ pub trait AshEngine {
                                     // For this setup, engine will get framebuffer from its internal list using image_index
                                     // and render_area/viewport from its internal state or window_size.
     );
+    fn set_swapchain_framebuffers(&mut self, new_framebuffers: Vec<vk::Framebuffer>);
 }

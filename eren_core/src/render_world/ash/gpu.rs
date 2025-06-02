@@ -677,6 +677,9 @@ impl AshGpuResourceManager {
         // For this design, engine's on_gpu_resources_ready might need to be callable for re-init
         // or a specific "on_swapchain_recreated" method on the engine.
         // For now, on_window_resized informs it of size change, pipelines should adapt or be generic.
+
+        let new_framebuffers = self.swapchain_framebuffers.clone();
+        self.engine.set_swapchain_framebuffers(new_framebuffers);
     }
 
     fn init_vulkan(&mut self, window: &Window) {
@@ -700,6 +703,8 @@ impl AshGpuResourceManager {
         let render_pass = self.render_pass.unwrap();
         let swapchain_format = self.swapchain_format.unwrap();
 
+        let framebuffers_clone = self.swapchain_framebuffers.clone();
+
         // Notify engine
         self.engine.on_gpu_resources_ready(
             instance,
@@ -709,6 +714,7 @@ impl AshGpuResourceManager {
             command_pool,
             swapchain_format,
             render_pass,
+            framebuffers_clone,
             window.inner_size(),
             window.scale_factor(),
             MAX_SPRITES,

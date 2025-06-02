@@ -72,9 +72,7 @@ where
         command_pool: vk::CommandPool,
         swapchain_format: vk::Format, // Used by renderer for pipeline
         render_pass: vk::RenderPass,  // Used by renderer for pipeline
-        // swapchain_images: &Vec<vk::Image>, // Not directly used by engine, but by GpuRM
-        // swapchain_image_views: &Vec<vk::ImageView>, // For creating framebuffers
-        // swapchain_framebuffers_param: &Vec<vk::Framebuffer>, // Use this to store
+        swapchain_framebuffers: Vec<vk::Framebuffer>,
         window_size: PhysicalSize<u32>,
         scale_factor: f64,
         max_sprites: u32,
@@ -83,7 +81,8 @@ where
         self.window_size = window_size;
         self.scale_factor = scale_factor;
         self.render_pass = Some(render_pass);
-        // self.swapchain_framebuffers = swapchain_framebuffers_param.clone(); // Store framebuffers
+
+        self.swapchain_framebuffers = swapchain_framebuffers;
 
         // It's important that device is cloned if multiple components need it,
         // or an Arc<Device> is used. Here, we clone for each manager.
@@ -241,5 +240,9 @@ where
                 .cmd_end_render_pass(command_buffer);
         }
         // AshGpuResourceManager will end the command buffer and submit it.
+    }
+
+    fn set_swapchain_framebuffers(&mut self, new_framebuffers: Vec<vk::Framebuffer>) {
+        self.swapchain_framebuffers = new_framebuffers;
     }
 }
