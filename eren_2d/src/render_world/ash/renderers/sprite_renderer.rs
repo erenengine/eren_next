@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use ash::vk;
+use eren_core::render_world::ash::buffer::{BufferResource, MemoryLocation, create_buffer};
 use glam::{Mat3, Vec2};
 
 const SPRITE_VERT_SHADER_BYTES: &[u8] = include_bytes!("sprite.vert.spv");
@@ -49,88 +50,6 @@ pub struct SpriteRenderCommand<SA> {
     pub alpha: f32,
     pub sprite_asset_id: SA,
     pub descriptor_set: vk::DescriptorSet,
-}
-
-struct BufferResource {
-    buffer: vk::Buffer,
-    memory: vk::DeviceMemory,
-    size: vk::DeviceSize,
-}
-
-impl BufferResource {
-    fn destroy(&self, device: &ash::Device) {
-        unsafe {
-            device.destroy_buffer(self.buffer, None);
-            device.free_memory(self.memory, None);
-        }
-    }
-}
-
-enum MemoryLocation {
-    GpuOnly,
-    CpuToGpu,
-}
-
-fn create_buffer<T: bytemuck::Pod>(
-    device: &ash::Device,
-    phys: &vk::PhysicalDeviceMemoryProperties,
-    contents: Option<&[T]>,
-    usage: vk::BufferUsageFlags,
-    location: MemoryLocation,
-) -> BufferResource {
-    let byte_len =
-        (contents.map(|c| c.len()).unwrap_or(1) * std::mem::size_of::<T>()) as vk::DeviceSize;
-
-    let buffer_create_info = vk::BufferCreateInfo::default()
-        .usage(usage)
-        .size(byte_len)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-    let buffer = unsafe { device.create_buffer(&buffer_create_info, None) }.unwrap();
-
-    let requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
-
-    let mem_type_index = (0..phys.memory_type_count)
-        .find(|&i| {
-            (requirements.memory_type_bits & (1 << i)) != 0
-                && phys.memory_types[i as usize]
-                    .property_flags
-                    .contains(match location {
-                        MemoryLocation::GpuOnly => vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                        MemoryLocation::CpuToGpu => {
-                            vk::MemoryPropertyFlags::HOST_VISIBLE
-                                | vk::MemoryPropertyFlags::HOST_COHERENT
-                        }
-                    })
-        })
-        .expect("No suitable memory type found!");
-
-    let alloc_info = vk::MemoryAllocateInfo::default()
-        .allocation_size(requirements.size)
-        .memory_type_index(mem_type_index as _);
-
-    let memory = unsafe { device.allocate_memory(&alloc_info, None) }.unwrap();
-    unsafe { device.bind_buffer_memory(buffer, memory, 0) }.unwrap();
-
-    if let (Some(data), MemoryLocation::CpuToGpu) = (contents, location) {
-        unsafe {
-            let ptr = device
-                .map_memory(memory, 0, byte_len, vk::MemoryMapFlags::empty())
-                .unwrap();
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr() as *const std::ffi::c_void,
-                ptr,
-                byte_len as usize,
-            );
-            device.unmap_memory(memory);
-        }
-    }
-
-    BufferResource {
-        buffer,
-        memory,
-        size: byte_len,
-    }
 }
 
 pub struct AshSpriteRenderer<SA> {
@@ -466,6 +385,24 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         self.quad_ibuffer = Some(quad_ibuffer);
 
         self.screen_info_buffer = Some(screen_info_buffer);
+    }
+
+    pub fn on_gpu_resources_lost(&mut self) {
+        self.device = None;
+
+        self.phys_mem_props = None;
+        self.pipeline_layout = None;
+        self.pipeline = None;
+        self.render_pass = None;
+        self.descriptor_pool = None;
+        self.screen_info_descriptor_set = None;
+
+        self.quad_vbuffer = None;
+        self.quad_ibuffer = None;
+        self.screen_info_buffer = None;
+
+        self.instance_buffer = None;
+        self.instance_capacity = 0;
     }
 
     pub fn on_window_resized(&self, new_size: winit::dpi::PhysicalSize<u32>, scale_factor: f64) {
