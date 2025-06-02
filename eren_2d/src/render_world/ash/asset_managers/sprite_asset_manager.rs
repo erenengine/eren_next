@@ -1,31 +1,36 @@
-use std::{collections::HashMap, hash::Hash, path::Path};
-
 use ash::{Device, vk};
+use eren_core::render_world::ash::buffer::{
+    MemoryLocation, create_buffer_with_size, find_memory_type_index,
+};
 use glam::Vec2;
 use image::{DynamicImage, EncodableLayout, GenericImageView};
-
-use eren_core::render_world::ash::buffer::{MemoryLocation, create_buffer};
+use std::{collections::HashMap, hash::Hash, path::Path};
 
 pub struct SpriteGpuResource {
     pub size: Vec2,
     pub descriptor_set: vk::DescriptorSet,
-    pub image: vk::Image,
-    pub image_memory: vk::DeviceMemory,
-    pub image_view: vk::ImageView,
+    image: vk::Image, // Made private, manage through methods if needed
+    image_memory: vk::DeviceMemory,
+    image_view: vk::ImageView,
 }
 
 impl SpriteGpuResource {
+    // Internal destroy, called by AshSpriteAssetManager's Drop or on_gpu_resources_lost
     fn destroy(&self, device: &Device) {
         unsafe {
             device.destroy_image_view(self.image_view, None);
             device.destroy_image(self.image, None);
             device.free_memory(self.image_memory, None);
+            // Descriptor sets are freed from the pool, not individually here typically
         }
     }
 }
 
-pub struct AshSpriteAssetManager<SA> {
-    device: Option<Device>,
+pub struct AshSpriteAssetManager<SA>
+where
+    SA: Eq + Hash + Clone,
+{
+    device: Option<Device>, // Store as Option<Arc<Device>> if shared or just Device if exclusively owned logic
     phys_mem_props: Option<vk::PhysicalDeviceMemoryProperties>,
     graphics_queue: Option<vk::Queue>,
     command_pool: Option<vk::CommandPool>,
@@ -34,10 +39,10 @@ pub struct AshSpriteAssetManager<SA> {
     descriptor_pool: Option<vk::DescriptorPool>,
     sampler: Option<vk::Sampler>,
 
-    loading_assets: Vec<SA>,
-    loaded_images: HashMap<SA, DynamicImage>,
-
+    // loading_assets: Vec<SA>, // Not used in provided logic
+    loaded_images_cache: HashMap<SA, DynamicImage>, // Keep images in CPU memory if needed for re-upload
     gpu_resources: HashMap<SA, SpriteGpuResource>,
+    max_sprites_capacity: u32,
 }
 
 impl<SA: Eq + Hash + Clone> AshSpriteAssetManager<SA> {
@@ -50,76 +55,66 @@ impl<SA: Eq + Hash + Clone> AshSpriteAssetManager<SA> {
             descriptor_set_layout: None,
             descriptor_pool: None,
             sampler: None,
-
-            loading_assets: Vec::new(),
-            loaded_images: HashMap::new(),
-
+            loaded_images_cache: HashMap::new(),
             gpu_resources: HashMap::new(),
+            max_sprites_capacity: 0,
         }
     }
 
-    /// Returns the descriptor‑set layout required by the renderer (set = 1).
     pub fn descriptor_set_layout(&self) -> Option<vk::DescriptorSetLayout> {
         self.descriptor_set_layout
     }
 
-    /// Initialise GPU‑side objects once the Vulkan device is ready.
-    ///
-    /// * `phys_mem_props` – returned from `instance.get_physical_device_memory_properties`.
-    /// * `graphics_queue` / `command_pool` – used for the one‑shot upload + layout transition.
     pub fn on_gpu_resources_ready(
         &mut self,
-        device: Device,
+        device: Device, // Take ownership or Arc
         phys_mem_props: vk::PhysicalDeviceMemoryProperties,
         graphics_queue: vk::Queue,
         command_pool: vk::CommandPool,
         max_sprites: u32,
     ) {
-        debug_assert!(self.device.is_none(), "GPU resources already initialised");
+        // debug_assert!(self.device.is_none(), "GPU resources already initialised for AssetManager");
+        if self.device.is_some() {
+            // This might be a re-initialization after device loss.
+            // Call on_gpu_resources_lost first to clean up old state.
+            self.on_gpu_resources_lost_internal(false); // Don't nullify device yet
+        }
 
-        // Create one sampler (nearest‑neighbour, clamp‑to‑edge) shared by every sprite.
-        let sampler = unsafe {
-            device
-                .create_sampler(
-                    &vk::SamplerCreateInfo::default()
-                        .mag_filter(vk::Filter::NEAREST)
-                        .min_filter(vk::Filter::NEAREST)
-                        .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
-                        .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-                        .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
-                        .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE),
-                    None,
-                )
-                .expect("Failed to create sprite sampler")
-        };
+        self.max_sprites_capacity = max_sprites;
 
-        // Combined‑image‑sampler binding at binding = 0 (set = 1)
+        let sampler_info = vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::NEAREST)
+            .min_filter(vk::Filter::NEAREST)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .address_mode_u(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .address_mode_w(vk::SamplerAddressMode::CLAMP_TO_EDGE)
+            .border_color(vk::BorderColor::FLOAT_TRANSPARENT_BLACK) // Or OPAQUE_BLACK
+            .unnormalized_coordinates(false); // Usually false for texture sampling
+        // Add mipmapping setup if using mipmaps
+        let sampler = unsafe { device.create_sampler(&sampler_info, None) }
+            .expect("Failed to create sprite sampler");
+
         let bindings = [vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
+            .binding(0) // Binding for combined image sampler
             .descriptor_count(1)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT)];
-
         let set_layout_create = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-        let descriptor_set_layout = unsafe {
-            device
-                .create_descriptor_set_layout(&set_layout_create, None)
-                .expect("Failed to create sprite descriptor‑set layout")
-        };
+        let descriptor_set_layout =
+            unsafe { device.create_descriptor_set_layout(&set_layout_create, None) }
+                .expect("Failed to create sprite descriptor set layout");
 
-        // Descriptor pool able to allocate up to `max_sprites` sets.
         let pool_sizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-            descriptor_count: max_sprites,
+            descriptor_count: max_sprites, // Max number of sprites (descriptor sets)
         }];
         let pool_info = vk::DescriptorPoolCreateInfo::default()
             .max_sets(max_sprites)
-            .pool_sizes(&pool_sizes);
-        let descriptor_pool = unsafe {
-            device
-                .create_descriptor_pool(&pool_info, None)
-                .expect("Failed to create sprite descriptor pool")
-        };
+            .pool_sizes(&pool_sizes)
+            .flags(vk::DescriptorPoolCreateFlags::empty()); // Or FREE_DESCRIPTOR_SET_BIT if sets are individually freed
+        let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None) }
+            .expect("Failed to create sprite descriptor pool");
 
         self.device = Some(device);
         self.phys_mem_props = Some(phys_mem_props);
@@ -129,255 +124,303 @@ impl<SA: Eq + Hash + Clone> AshSpriteAssetManager<SA> {
         self.descriptor_pool = Some(descriptor_pool);
         self.sampler = Some(sampler);
 
-        // Upload any sprites that were requested *before* the GPU became ready.
+        // Re-upload any sprites that were loaded before GPU was ready or after device loss
         let to_upload: Vec<(SA, DynamicImage)> = self
-            .loaded_images
+            .loaded_images_cache
             .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
+            .map(|(k, v)| (k.clone(), v.clone())) // Clone to avoid borrowing issues
             .collect();
-        for (asset, img) in to_upload {
-            self.create_gpu_resource(asset, &img);
+        for (asset_id, img) in to_upload {
+            if !self.gpu_resources.contains_key(&asset_id) {
+                // Only upload if not already a GPU resource
+                self.upload_image_to_gpu(asset_id, &img);
+            }
         }
     }
 
-    /// Tears down GPU objects (e.g. on device loss / swap‑chain recreation with new device)
-    pub fn on_gpu_resources_lost(&mut self) {
-        if let Some(device) = &self.device {
+    /// Internal cleanup logic, `keep_device_ref` is true if called from Drop
+    fn on_gpu_resources_lost_internal(&mut self, keep_device_ref: bool) {
+        if let Some(device_ref) = &self.device {
+            // Use existing device ref for cleanup
             unsafe {
-                // Destroy per‑sprite resources
                 for (_, res) in self.gpu_resources.drain() {
-                    res.destroy(device);
+                    res.destroy(device_ref);
                 }
-                // Layout, pool, sampler
                 if let Some(pool) = self.descriptor_pool.take() {
-                    device.destroy_descriptor_pool(pool, None);
+                    device_ref.destroy_descriptor_pool(pool, None);
                 }
                 if let Some(layout) = self.descriptor_set_layout.take() {
-                    device.destroy_descriptor_set_layout(layout, None);
+                    device_ref.destroy_descriptor_set_layout(layout, None);
                 }
-                if let Some(sampler) = self.sampler.take() {
-                    device.destroy_sampler(sampler, None);
+                if let Some(sampler_val) = self.sampler.take() {
+                    // Renamed to avoid conflict
+                    device_ref.destroy_sampler(sampler_val, None);
                 }
             }
         }
-        self.device = None;
-        self.phys_mem_props = None;
-        self.graphics_queue = None;
-        self.command_pool = None;
+        if !keep_device_ref {
+            self.device = None; // Nullify if device is truly lost
+        }
+        // Keep phys_mem_props, graphics_queue, command_pool if device is kept (e.g. for reinit)
+        // Or clear them if device is truly lost.
+        if !keep_device_ref {
+            self.phys_mem_props = None;
+            self.graphics_queue = None;
+            self.command_pool = None;
+        }
     }
 
-    /// Loads an image from disk (or elsewhere) *and* immediately uploads it if the GPU is ready.
-    pub fn load_sprite<P: AsRef<Path>>(&mut self, asset: SA, path: P) {
-        let image = image::open(path).expect("Failed to load sprite");
-        self.loaded_images.insert(asset.clone(), image.clone());
-        self.create_gpu_resource(asset, &image);
+    pub fn on_gpu_resources_lost(&mut self) {
+        self.on_gpu_resources_lost_internal(false);
     }
 
-    /// Returns GPU resource for a sprite (if it has already been uploaded).
-    pub fn get_gpu_resource(&self, asset: &SA) -> Option<&SpriteGpuResource> {
-        self.gpu_resources.get(asset)
+    pub fn load_sprite<P: AsRef<Path>>(&mut self, asset_id: SA, path: P) {
+        // Avoid reloading if already cached (CPU or GPU)
+        if self.loaded_images_cache.contains_key(&asset_id)
+            || self.gpu_resources.contains_key(&asset_id)
+        {
+            // Potentially log a warning or handle as an update if behavior is desired
+            return;
+        }
+
+        let image = image::open(path).expect("Failed to load sprite image");
+        // If GPU is ready, upload immediately. Otherwise, it will be uploaded when on_gpu_resources_ready is called.
+        if self.device.is_some() {
+            self.upload_image_to_gpu(asset_id.clone(), &image);
+        }
+        self.loaded_images_cache.insert(asset_id, image); // Always cache on CPU
     }
 
-    fn create_gpu_resource(&mut self, asset: SA, image: &DynamicImage) {
-        let (device, phys_mem_props, queue, cmd_pool, set_layout, sampler, pool) = match (
-            &self.device,
-            &self.phys_mem_props,
-            &self.graphics_queue,
-            &self.command_pool,
-            &self.descriptor_set_layout,
-            &self.sampler,
-            &self.descriptor_pool,
-        ) {
-            (Some(d), Some(p), Some(q), Some(cp), Some(l), Some(s), Some(pool)) => {
-                (d, p, q, cp, l, s, pool)
-            }
-            _ => {
-                // GPU not ready yet – we'll upload later
-                return;
-            }
-        };
+    pub fn get_gpu_resource(&self, asset_id: &SA) -> Option<&SpriteGpuResource> {
+        self.gpu_resources.get(asset_id)
+    }
 
-        let rgba8 = image.to_rgba8();
-        let (width, height) = image.dimensions();
-        let extent = vk::Extent3D {
+    fn upload_image_to_gpu(&mut self, asset_id: SA, image_data: &DynamicImage) {
+        let (device, phys_mem_props, queue, cmd_pool, set_layout_val, sampler_val, desc_pool_val) =
+            match (
+                self.device.as_ref(),
+                self.phys_mem_props.as_ref(),
+                self.graphics_queue,
+                self.command_pool,
+                self.descriptor_set_layout,
+                self.sampler,
+                self.descriptor_pool,
+            ) {
+                (Some(d), Some(pmp), Some(q), Some(cp), Some(sl), Some(s), Some(dp)) => {
+                    (d, pmp, q, cp, sl, s, dp)
+                }
+                _ => {
+                    // GPU resources not fully initialized, defer upload.
+                    // This case should be handled by on_gpu_resources_ready re-uploading.
+                    return;
+                }
+            };
+
+        let rgba8_image = image_data.to_rgba8();
+        let (width, height) = image_data.dimensions();
+        let image_extent = vk::Extent3D {
             width,
             height,
             depth: 1,
         };
+        let image_pixel_data = rgba8_image.as_bytes();
+        let image_data_size = image_pixel_data.len() as vk::DeviceSize;
 
-        let img_ci = vk::ImageCreateInfo::default()
+        // --- Create Image ---
+        let image_create_info = vk::ImageCreateInfo::default()
             .image_type(vk::ImageType::TYPE_2D)
-            .format(vk::Format::R8G8B8A8_SRGB)
-            .extent(extent)
+            .format(vk::Format::R8G8B8A8_SRGB) // Assuming sRGB format for sprites
+            .extent(image_extent)
             .mip_levels(1)
             .array_layers(1)
             .samples(vk::SampleCountFlags::TYPE_1)
             .tiling(vk::ImageTiling::OPTIMAL)
             .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE) // No concurrent access needed typically
             .initial_layout(vk::ImageLayout::UNDEFINED);
-
-        let image_handle = unsafe {
-            device
-                .create_image(&img_ci, None)
-                .expect("Failed to create sprite image")
-        };
+        let image_handle = unsafe { device.create_image(&image_create_info, None) }
+            .expect("Failed to create sprite image handle");
 
         let mem_requirements = unsafe { device.get_image_memory_requirements(image_handle) };
-        let mem_type_index = find_memory_type(
-            mem_requirements.memory_type_bits,
-            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        let mem_type_index = find_memory_type_index(
+            &mem_requirements,
             phys_mem_props,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
         )
-        .expect("Unable to find device‑local memory type for sprite texture");
+        .expect("Unable to find device-local memory type for sprite image");
 
         let alloc_info = vk::MemoryAllocateInfo::default()
             .allocation_size(mem_requirements.size)
             .memory_type_index(mem_type_index);
         let image_memory = unsafe { device.allocate_memory(&alloc_info, None) }
             .expect("Failed to allocate sprite image memory");
-        unsafe {
-            device
-                .bind_image_memory(image_handle, image_memory, 0)
-                .expect("Failed to bind sprite image memory");
-        }
+        unsafe { device.bind_image_memory(image_handle, image_memory, 0) }
+            .expect("Failed to bind sprite image memory");
 
-        let staging = create_buffer(
+        // --- Staging Buffer and Upload ---
+        let staging_buffer = create_buffer_with_size(
             device,
             phys_mem_props,
-            Some(rgba8.as_bytes()),
+            image_data_size,
+            Some(image_pixel_data), // Pass data directly
             vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu,
+            MemoryLocation::CpuToGpu, // Host visible for data copy
         );
 
-        // One‑time command buffer
-        let cmd_buf_alloc = vk::CommandBufferAllocateInfo::default()
-            .command_pool(*cmd_pool)
+        // --- Command Buffer for Transfer and Layout Transition ---
+        let cmd_buf_alloc_info = vk::CommandBufferAllocateInfo::default()
+            .command_pool(cmd_pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
-        let cmd_buf = unsafe { device.allocate_command_buffers(&cmd_buf_alloc) }.expect(
-            "Failed to alloc
-            upload CB",
-        )[0];
+        let cmd_buf = unsafe { device.allocate_command_buffers(&cmd_buf_alloc_info) }
+            .expect("Failed to allocate command buffer for sprite upload")[0];
 
-        let cmd_begin = vk::CommandBufferBeginInfo::default()
+        let cmd_begin_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-        unsafe { device.begin_command_buffer(cmd_buf, &cmd_begin) }.unwrap();
+        unsafe {
+            device
+                .begin_command_buffer(cmd_buf, &cmd_begin_info)
+                .unwrap();
+        }
 
         // Transition: UNDEFINED -> TRANSFER_DST_OPTIMAL
-        let barrier_0 = vk::ImageMemoryBarrier::default()
-            .image(image_handle)
-            .subresource_range(
-                vk::ImageSubresourceRange::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .level_count(1)
-                    .layer_count(1),
-            )
+        let barrier_to_transfer_dst = vk::ImageMemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::empty()) // No prior access
+            .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
             .old_layout(vk::ImageLayout::UNDEFINED)
             .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-            .src_access_mask(vk::AccessFlags::empty())
-            .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE);
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED) // No ownership transfer
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(image_handle)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
         unsafe {
             device.cmd_pipeline_barrier(
                 cmd_buf,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::TOP_OF_PIPE, // Before any writes
+                vk::PipelineStageFlags::TRANSFER,    // Before transfer operations
                 vk::DependencyFlags::empty(),
                 &[],
                 &[],
-                &[barrier_0],
+                &[barrier_to_transfer_dst],
             );
         }
 
-        // Copy buffer->image
-        let copy = vk::BufferImageCopy::default()
-            .image_subresource(
-                vk::ImageSubresourceLayers::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .layer_count(1),
-            )
-            .image_extent(extent);
+        // Copy buffer to image
+        let buffer_image_copy_region = vk::BufferImageCopy::default()
+            .buffer_offset(0)
+            .buffer_row_length(0) // Tightly packed
+            .buffer_image_height(0) // Tightly packed
+            .image_subresource(vk::ImageSubresourceLayers {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                mip_level: 0,
+                base_array_layer: 0,
+                layer_count: 1,
+            })
+            .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(image_extent);
         unsafe {
             device.cmd_copy_buffer_to_image(
                 cmd_buf,
-                staging.buffer,
+                staging_buffer.buffer,
                 image_handle,
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[copy],
-            )
-        };
-
-        // Transition: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
-        let barrier_1 = vk::ImageMemoryBarrier::default()
-            .image(image_handle)
-            .subresource_range(
-                vk::ImageSubresourceRange::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .level_count(1)
-                    .layer_count(1),
-            )
-            .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-            .dst_access_mask(vk::AccessFlags::SHADER_READ);
-        unsafe {
-            device.cmd_pipeline_barrier(
-                cmd_buf,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier_1],
+                &[buffer_image_copy_region],
             );
         }
 
-        unsafe { device.end_command_buffer(cmd_buf) }.unwrap();
+        // Transition: TRANSFER_DST_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL
+        let barrier_to_shader_read = vk::ImageMemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ)
+            .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+            .image(image_handle)
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd_buf,
+                vk::PipelineStageFlags::TRANSFER, // After transfer operations
+                vk::PipelineStageFlags::FRAGMENT_SHADER, // Before shader reads
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_to_shader_read],
+            );
+        }
 
-        let binding = [cmd_buf];
-        let submit_info = vk::SubmitInfo::default().command_buffers(&binding);
-        unsafe { device.queue_submit(*queue, &[submit_info], vk::Fence::null()) }
-            .expect("Failed to submit sprite upload");
-        unsafe { device.queue_wait_idle(*queue).unwrap() };
+        unsafe {
+            device.end_command_buffer(cmd_buf).unwrap();
+        }
 
-        // Clean up staging buffer and command buffer
-        staging.destroy(device);
-        unsafe { device.free_command_buffers(*cmd_pool, &[cmd_buf]) };
+        // Submit and wait
+        let submit_info = vk::SubmitInfo::default().command_buffers(std::slice::from_ref(&cmd_buf));
+        unsafe {
+            device
+                .queue_submit(queue, &[submit_info], vk::Fence::null())
+                .expect("Failed to submit sprite image upload commands");
+            device
+                .queue_wait_idle(queue)
+                .expect("Queue wait idle failed after sprite upload");
+        }
 
-        // View
-        let view_ci = vk::ImageViewCreateInfo::default()
+        // Cleanup temporary resources
+        staging_buffer.destroy(device);
+        unsafe {
+            device.free_command_buffers(cmd_pool, &[cmd_buf]);
+        }
+
+        // --- Create Image View ---
+        let view_create_info = vk::ImageViewCreateInfo::default()
             .image(image_handle)
             .view_type(vk::ImageViewType::TYPE_2D)
-            .format(vk::Format::R8G8B8A8_SRGB)
-            .subresource_range(
-                vk::ImageSubresourceRange::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .level_count(1)
-                    .layer_count(1),
-            );
-        let image_view = unsafe { device.create_image_view(&view_ci, None) }
-            .expect("Failed to create sprite view");
+            .format(vk::Format::R8G8B8A8_SRGB) // Must match image format
+            .subresource_range(vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            });
+        let image_view = unsafe { device.create_image_view(&view_create_info, None) }
+            .expect("Failed to create sprite image view");
 
-        // Allocate & update descriptor set
+        // --- Allocate and Update Descriptor Set ---
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(*pool)
-            .set_layouts(std::slice::from_ref(set_layout));
+            .descriptor_pool(desc_pool_val)
+            .set_layouts(std::slice::from_ref(&set_layout_val));
         let descriptor_set = unsafe { device.allocate_descriptor_sets(&alloc_info) }
-            .expect("Failed to alloc sprite set")[0];
+            .expect("Failed to allocate sprite descriptor set")[0];
 
-        let image_info = vk::DescriptorImageInfo::default()
-            .sampler(*sampler)
+        let image_info_for_descriptor = vk::DescriptorImageInfo::default()
+            .sampler(sampler_val)
             .image_view(image_view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let write = vk::WriteDescriptorSet::default()
+        let write_descriptor_set = vk::WriteDescriptorSet::default()
             .dst_set(descriptor_set)
-            .dst_binding(0)
+            .dst_binding(0) // Matches layout binding
+            .dst_array_element(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(std::slice::from_ref(&image_info));
-        unsafe { device.update_descriptor_sets(&[write], &[]) };
+            .image_info(std::slice::from_ref(&image_info_for_descriptor));
+        unsafe {
+            device.update_descriptor_sets(&[write_descriptor_set], &[]);
+        }
 
-        // Store resource for user access
         self.gpu_resources.insert(
-            asset,
+            asset_id,
             SpriteGpuResource {
                 size: Vec2::new(width as f32, height as f32),
                 descriptor_set,
@@ -389,38 +432,11 @@ impl<SA: Eq + Hash + Clone> AshSpriteAssetManager<SA> {
     }
 }
 
-impl<SA> Drop for AshSpriteAssetManager<SA> {
+impl<SA: Eq + Hash + Clone> Drop for AshSpriteAssetManager<SA> {
     fn drop(&mut self) {
-        if let Some(device) = &self.device {
-            unsafe {
-                for (_, res) in self.gpu_resources.drain() {
-                    res.destroy(device);
-                }
-                if let Some(pool) = self.descriptor_pool.take() {
-                    device.destroy_descriptor_pool(pool, None);
-                }
-                if let Some(layout) = self.descriptor_set_layout.take() {
-                    device.destroy_descriptor_set_layout(layout, None);
-                }
-                if let Some(sampler) = self.sampler.take() {
-                    device.destroy_sampler(sampler, None);
-                }
-            }
-        }
+        // Pass true to keep device ref as it's being dropped from self.device
+        self.on_gpu_resources_lost_internal(true);
+        // self.device will be dropped automatically if it's owned (Option<Device>)
+        // If it's an Arc<Device>, the Arc is dropped.
     }
-}
-
-fn find_memory_type(
-    type_bits: u32,
-    reqs: vk::MemoryPropertyFlags,
-    props: &vk::PhysicalDeviceMemoryProperties,
-) -> Option<u32> {
-    for i in 0..props.memory_type_count {
-        if (type_bits & (1 << i)) != 0
-            && props.memory_types[i as usize].property_flags.contains(reqs)
-        {
-            return Some(i);
-        }
-    }
-    None
 }
