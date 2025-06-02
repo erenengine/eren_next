@@ -3,11 +3,7 @@ use eren_core::render_world::ash::engine::AshEngine;
 use std::{hash::Hash, time::Instant};
 use winit::dpi::PhysicalSize;
 
-use crate::game_world::{
-    nodes::game_node::GameNode,
-    state::GameState, // Alias to avoid conflict
-    transform::GlobalTransform,
-};
+use crate::game_world::{nodes::game_node::GameNode, state::GameState, transform::GlobalTransform};
 
 use super::{
     asset_managers::sprite_asset_manager::AshSpriteAssetManager,
@@ -66,11 +62,11 @@ where
         &mut self,
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        device: ash::Device,
+        device: ash::Device, // Ownership(Arc) 획득
         graphics_queue: vk::Queue,
         command_pool: vk::CommandPool,
         swapchain_format: vk::Format,
-        render_pass: vk::RenderPass,
+        render_pass: vk::RenderPass, // 엔진이 생성한 RenderPass
         swapchain_framebuffers: Vec<vk::Framebuffer>,
         window_size: PhysicalSize<u32>,
         scale_factor: f64,
@@ -84,7 +80,7 @@ where
         self.render_pass = Some(render_pass);
         self.swapchain_framebuffers = swapchain_framebuffers;
 
-        // AssetManager 초기화
+        // ─── AssetManager 초기화 ───
         let device_clone_for_assets = device.clone();
         let device_clone_for_renderer = device.clone();
         let phys_mem_props =
@@ -103,12 +99,13 @@ where
             .descriptor_set_layout()
             .expect("Sprite asset manager descriptor set layout not initialized");
 
-        // Renderer 초기화 (렌더 패스는 엔진에서만 다루므로 파라미터에서 제외)
+        // ─── Renderer 초기화 (render_pass를 꼭 같이 넘겨줌) ───
         self.sprite_renderer.on_gpu_resources_ready(
             instance,
             physical_device,
             device_clone_for_renderer,
             phys_mem_props,
+            render_pass, // ★ 엔진에서 생성한 render_pass 전달
             sprite_texture_set_layout,
             window_size,
             scale_factor,
@@ -133,7 +130,7 @@ where
             .on_window_resized(new_size, new_scale_factor);
     }
 
-    /// ▶ 매 프레임 호출되는 업데이트 로직
+    /// ▶ 매 프레임 커맨드 버퍼를 받아서 그리는 로직
     fn update(
         &mut self,
         command_buffer: vk::CommandBuffer,
@@ -144,6 +141,9 @@ where
         let now = Instant::now();
         self.game_state.delta_time = now.duration_since(self.last_frame_time).as_secs_f32();
         self.last_frame_time = now;
+
+        // TODO: 제거
+        println!("FPS: {}", 1.0 / self.game_state.delta_time);
 
         // 2) AssetManager에 로딩 요청된 스프라이트 처리
         let pending_to_load: Vec<(SA, String)> =
@@ -180,9 +180,9 @@ where
         let render_pass = self.render_pass.unwrap();
         let framebuffer = self.swapchain_framebuffers[image_index as usize];
 
-        // 5) 인스턴스 버퍼 업로드 (렌더 패스 시작 전)
+        // 5) 인스턴스 버퍼(Staging → GPU) 업데이트 (렌더 패스 시작 전)
         self.sprite_renderer
-            .update_instance_buffer(command_buffer, &sprite_render_commands);
+            .update_instance_buffer(&sprite_render_commands);
 
         // 6) 엔진에서 렌더 패스 시작
         let viewport = vk::Viewport {
@@ -200,7 +200,6 @@ where
                 height: self.window_size.height,
             },
         };
-
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(render_pass)
             .framebuffer(framebuffer)
@@ -216,7 +215,6 @@ where
                     float32: [0.1, 0.1, 0.1, 1.0],
                 },
             }]);
-
         unsafe {
             device.cmd_begin_render_pass(
                 command_buffer,
@@ -225,7 +223,7 @@ where
             );
         }
 
-        // 7) 실제 그리기 호출 (renderer.draw)
+        // 7) 실제 Draw 호출 (renderer.draw)
         self.sprite_renderer.draw(
             command_buffer,
             render_pass,
@@ -235,10 +233,11 @@ where
             &sprite_render_commands,
         );
 
-        // 8) 엔진에서 렌더 패스 종료
+        // 8) 렌더 패스 종료
         unsafe {
             device.cmd_end_render_pass(command_buffer);
         }
+        // (커맨드 버퍼 종료와 제출은 외부 GpuResourceManager 등에서 처리)
     }
 
     fn set_swapchain_framebuffers(&mut self, new_framebuffers: Vec<vk::Framebuffer>) {
