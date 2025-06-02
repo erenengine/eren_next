@@ -815,12 +815,6 @@ impl GpuResourceManager for AshGpuResourceManager {
             .update(command_buffer, image_index, self.current_frame);
         // --- End Engine Update ---
 
-        unsafe {
-            device
-                .end_command_buffer(command_buffer)
-                .expect("Failed to end command buffer");
-        }
-
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -842,6 +836,12 @@ impl GpuResourceManager for AshGpuResourceManager {
                     self.in_flight_fences[self.current_frame],
                 )
                 .expect("Failed to submit draw command buffer");
+        }
+
+        unsafe {
+            device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to end command buffer");
         }
 
         let swapchains = [self.swapchain_khr.unwrap()];

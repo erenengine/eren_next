@@ -1,4 +1,5 @@
 use ash::{Device, Instance as AshInstance, vk};
+use bytemuck::cast_slice;
 use eren_core::render_world::ash::buffer::{
     BufferResource, MemoryLocation, create_buffer_with_size,
 };
@@ -11,12 +12,16 @@ const SPRITE_VERT_SHADER_BYTES: &[u8] = include_bytes!("sprite.vert.spv"); // En
 const SPRITE_FRAG_SHADER_BYTES: &[u8] = include_bytes!("sprite.frag.spv"); // Ensure path is correct
 
 pub fn create_shader_module(device: &Device, code: &[u8]) -> Result<vk::ShaderModule, vk::Result> {
-    let code_u32 = unsafe {
-        std::slice::from_raw_parts(
-            code.as_ptr() as *const u32,
-            code.len() / std::mem::size_of::<u32>(),
-        )
-    };
+    assert_eq!(
+        code.len() % 4,
+        0,
+        "SPIR-V bytecode must be aligned to 4 bytes"
+    );
+
+    let mut owned = Vec::with_capacity(code.len());
+    owned.extend_from_slice(code);
+
+    let code_u32 = bytemuck::cast_slice(&owned);
     let create_info = vk::ShaderModuleCreateInfo::default().code(code_u32);
     unsafe { device.create_shader_module(&create_info, None) }
 }
@@ -215,7 +220,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             (std::mem::size_of::<Vertex>() * QUAD_VERTICES.len()) as vk::DeviceSize,
             Some(&QUAD_VERTICES),
             vk::BufferUsageFlags::VERTEX_BUFFER,
-            MemoryLocation::GpuOnly, // Or CpuToGpu if static and small
+            MemoryLocation::CpuToGpu,
         );
         let quad_ib = create_buffer_with_size(
             &device,
@@ -223,7 +228,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             (std::mem::size_of::<u16>() * QUAD_INDICES.len()) as vk::DeviceSize,
             Some(&QUAD_INDICES),
             vk::BufferUsageFlags::INDEX_BUFFER,
-            MemoryLocation::GpuOnly,
+            MemoryLocation::CpuToGpu,
         );
 
         // --- Graphics Pipeline ---

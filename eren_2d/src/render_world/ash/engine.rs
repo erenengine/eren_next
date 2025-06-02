@@ -27,6 +27,7 @@ where
 
     last_frame_time: Instant,
 
+    device: Option<ash::Device>,
     // Store these to pass to renderer
     render_pass: Option<vk::RenderPass>,
     // Framebuffers for each swapchain image, managed by GpuResourceManager, renderer needs one per frame
@@ -48,6 +49,7 @@ where
             sprite_asset_manager: AshSpriteAssetManager::new(),
             sprite_renderer: AshSpriteRenderer::new(),
             last_frame_time: Instant::now(),
+            device: None,
             render_pass: None,
             swapchain_framebuffers: Vec::new(),
             window_size: PhysicalSize::new(0, 0), // Initialized in on_gpu_resources_ready
@@ -205,20 +207,23 @@ where
             },
         };
 
-        // The `framebuffer` and `render_area` are implicitly part of the render pass
-        // that AshGpuResourceManager should have started.
-        // If engine needs to start its own render pass:
-        /*
-        let device = ... // Get device reference
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass.unwrap())
             .framebuffer(self.swapchain_framebuffers[image_index as usize])
             .render_area(scissor) // Scissor usually same as render area for full screen
-            .clear_values(&[vk::ClearValue { color: vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 1.0] } } ]);
+            .clear_values(&[vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.1, 0.1, 0.1, 1.0],
+                },
+            }]);
+
         unsafe {
-            device.cmd_begin_render_pass(command_buffer, &render_pass_begin_info, vk::SubpassContents::INLINE);
+            self.device.as_ref().unwrap().cmd_begin_render_pass(
+                command_buffer,
+                &render_pass_begin_info,
+                vk::SubpassContents::INLINE,
+            );
         }
-        */
 
         self.sprite_renderer.render(
             command_buffer,
@@ -229,11 +234,12 @@ where
             &sprite_render_commands,
         );
 
-        /*
         unsafe {
-            device.cmd_end_render_pass(command_buffer);
+            self.device
+                .as_ref()
+                .unwrap()
+                .cmd_end_render_pass(command_buffer);
         }
-        */
         // AshGpuResourceManager will end the command buffer and submit it.
     }
 }
