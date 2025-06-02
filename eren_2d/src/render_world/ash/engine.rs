@@ -65,7 +65,7 @@ where
         device: ash::Device, // Ownership(Arc) 획득
         graphics_queue: vk::Queue,
         command_pool: vk::CommandPool,
-        swapchain_format: vk::Format,
+        _swapchain_format: vk::Format,
         render_pass: vk::RenderPass, // 엔진이 생성한 RenderPass
         swapchain_framebuffers: Vec<vk::Framebuffer>,
         window_size: PhysicalSize<u32>,

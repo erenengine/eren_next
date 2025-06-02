@@ -150,7 +150,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
     pub fn on_gpu_resources_ready(
         &mut self,
         _instance_ash: &ash::Instance,
-        physical_device: vk::PhysicalDevice,
+        _physical_device: vk::PhysicalDevice,
         device: Device,
         phys_mem_props: vk::PhysicalDeviceMemoryProperties,
         render_pass: vk::RenderPass,

@@ -425,7 +425,6 @@ impl AshGpuResourceManager {
             .surface_loader
             .as_ref()
             .expect("Surface loader not available");
-        let device = self.device.as_ref().expect("Device not available");
         let swapchain_loader = self
             .swapchain_loader
             .as_ref()
@@ -676,12 +675,6 @@ impl AshGpuResourceManager {
         self.engine.on_gpu_resources_lost();
 
         let device_clone = self.device.as_ref().unwrap().clone();
-        let phys_mem_props = unsafe {
-            self.instance
-                .as_ref()
-                .unwrap()
-                .get_physical_device_memory_properties(self.physical_device.unwrap())
-        };
         let graphics_queue = self.graphics_queue.unwrap();
         let command_pool = self.command_pool.unwrap();
         let swapchain_format = self.swapchain_format.unwrap();
@@ -973,21 +966,17 @@ impl Drop for AshGpuResourceManager {
             }
         }
 
-        if let (Some(surface_loader), Some(surface_khr), Some(instance)) = (
-            self.surface_loader.take(),
-            self.surface_khr.take(),
-            self.instance.as_ref(),
-        ) {
+        if let (Some(surface_loader), Some(surface_khr)) =
+            (self.surface_loader.take(), self.surface_khr.take())
+        {
             unsafe {
                 surface_loader.destroy_surface(surface_khr, None);
             }
         }
 
-        if let (Some(debug_utils_loader), Some(debug_messenger), Some(instance)) = (
-            self.debug_utils_loader.take(),
-            self.debug_messenger.take(),
-            self.instance.as_ref(),
-        ) {
+        if let (Some(debug_utils_loader), Some(debug_messenger)) =
+            (self.debug_utils_loader.take(), self.debug_messenger.take())
+        {
             #[cfg(debug_assertions)]
             unsafe {
                 debug_utils_loader.destroy_debug_utils_messenger(debug_messenger, None);
@@ -1010,17 +999,17 @@ unsafe extern "system" fn vulkan_debug_callback(
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _p_user_data: *mut std::ffi::c_void,
 ) -> vk::Bool32 {
-    let callback_data = *p_callback_data;
+    let callback_data = unsafe { *p_callback_data };
     let message_id_number = callback_data.message_id_number;
     let message_id_name = if callback_data.p_message_id_name.is_null() {
         std::borrow::Cow::from("None")
     } else {
-        CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
+        unsafe { CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy() }
     };
     let message = if callback_data.p_message.is_null() {
         std::borrow::Cow::from("None")
     } else {
-        CStr::from_ptr(callback_data.p_message).to_string_lossy()
+        unsafe { CStr::from_ptr(callback_data.p_message).to_string_lossy() }
     };
 
     println!(
