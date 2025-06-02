@@ -47,7 +47,7 @@ where
     fn on_gpu_resources_ready(
         &mut self,
         instance: &ash::Instance,
-        phys_device: vk::PhysicalDevice,
+        physical_device: vk::PhysicalDevice,
         device: ash::Device,
         graphics_queue: vk::Queue,
         command_pool: vk::CommandPool,
@@ -58,7 +58,7 @@ where
     ) {
         self.sprite_asset_manager.on_gpu_resources_ready(
             device.clone(),
-            unsafe { instance.get_physical_device_memory_properties(phys_device) },
+            unsafe { instance.get_physical_device_memory_properties(physical_device) },
             graphics_queue,
             command_pool,
             max_sprites,
@@ -71,7 +71,7 @@ where
 
         self.sprite_renderer.on_gpu_resources_ready(
             instance,
-            phys_device,
+            physical_device,
             device,
             swapchain_format,
             sprite_set_layout,

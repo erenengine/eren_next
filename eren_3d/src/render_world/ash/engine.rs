@@ -25,7 +25,7 @@ impl<R: GameNode<SA>, SA> AshEngine for AshEngine3D<R, SA> {
     fn on_gpu_resources_ready(
         &mut self,
         instance: &ash::Instance,
-        phys_device: vk::PhysicalDevice,
+        physical_device: vk::PhysicalDevice,
         device: ash::Device,
         graphics_queue: vk::Queue,
         command_pool: vk::CommandPool,

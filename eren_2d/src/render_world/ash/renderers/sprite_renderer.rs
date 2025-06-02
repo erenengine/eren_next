@@ -99,14 +99,14 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
     pub fn on_gpu_resources_ready(
         &mut self,
         instance: &ash::Instance,
-        phys_device: vk::PhysicalDevice,
+        physical_device: vk::PhysicalDevice,
         device: ash::Device,
         swapchain_format: vk::Format,
         sprite_set_layout: vk::DescriptorSetLayout,
         window_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) {
-        let phys_mem_props = unsafe { instance.get_physical_device_memory_properties(phys_device) };
+        let phys_mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
         let screen_info_cpu = ScreenInfo {
             resolution: [window_size.width as f32, window_size.height as f32],
