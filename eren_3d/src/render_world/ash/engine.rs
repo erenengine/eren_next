@@ -42,8 +42,8 @@ impl<R: GameNode<SA>, SA> AshEngine for AshEngine3D<R, SA> {
 
     fn update(
         &mut self,
-        cb: vk::CommandBuffer,
-        framebuffer: vk::Framebuffer,
+        command_buffer: vk::CommandBuffer,
+        frame_buffer: vk::Framebuffer,
         render_area: vk::Rect2D,
         viewport: vk::Viewport,
         scissor: vk::Rect2D,

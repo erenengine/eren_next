@@ -1,23 +1,53 @@
-use std::{ffi::CString, sync::Arc};
+use std::sync::Arc;
 
 use super::engine::AshEngine;
 use crate::render_world::common::gpu::GpuResourceManager;
-use ash::{Entry, Instance, vk};
-use ash_window::create_surface;
+use ash::{Entry, vk};
 use wgpu::rwh::{HasDisplayHandle, HasWindowHandle};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use ash::khr::{get_physical_device_properties2, portability_enumeration, surface, swapchain};
 
+const MAX_SPRITES: u32 = 2048;
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
 pub struct AshGpuResourceManager {
     engine: Box<dyn AshEngine>,
     entry: Entry,
+
+    device: Option<ash::Device>,
+    swapchain_device: Option<swapchain::Device>,
+    swapchain_khr: Option<vk::SwapchainKHR>,
+    swapchain_extent: Option<vk::Extent2D>,
+    graphics_queue: Option<vk::Queue>,
+    present_queue: Option<vk::Queue>,
+
+    image_available_semaphores: Vec<vk::Semaphore>,
+    render_finished_semaphores: Vec<vk::Semaphore>,
+    in_flight_fences: Vec<vk::Fence>,
+
+    current_frame: usize,
 }
 
 impl AshGpuResourceManager {
     pub fn new(engine: Box<dyn AshEngine>) -> Self {
         let entry = unsafe { Entry::load().expect("Failed to load entry point") };
-        Self { engine, entry }
+        Self {
+            engine,
+            entry,
+
+            device: None,
+            swapchain_device: None,
+            swapchain_khr: None,
+            swapchain_extent: None,
+            graphics_queue: None,
+            present_queue: None,
+
+            image_available_semaphores: Vec::new(),
+            render_finished_semaphores: Vec::new(),
+            in_flight_fences: Vec::new(),
+            current_frame: 0,
+        }
     }
 }
 
@@ -95,22 +125,162 @@ impl GpuResourceManager for AshGpuResourceManager {
             })
             .unwrap();
 
-        println!(
-            "Physical device: {:?}, Graphics queue: {:?}, Present queue: {:?}",
-            physical_device, graphics_q_index, present_q_index
-        );
+        let priorities = [1.0];
+        let queue_info = vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(graphics_q_index)
+            .queue_priorities(&priorities);
 
-        /*self.engine.on_gpu_resources_ready(
+        let device_extension_names = [
+            swapchain::NAME.as_ptr(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            ash::khr::portability_subset::NAME.as_ptr(),
+        ];
+
+        let features = vk::PhysicalDeviceFeatures::default().shader_clip_distance(true);
+
+        let device_create_info = vk::DeviceCreateInfo::default()
+            .queue_create_infos(std::slice::from_ref(&queue_info))
+            .enabled_extension_names(&device_extension_names)
+            .enabled_features(&features);
+
+        let device = unsafe {
+            instance
+                .create_device(physical_device, &device_create_info, None)
+                .unwrap()
+        };
+
+        let graphics_queue = unsafe { device.get_device_queue(graphics_q_index, 0) };
+
+        let pool_create_info = vk::CommandPoolCreateInfo::default()
+            .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+            .queue_family_index(graphics_q_index);
+
+        let command_pool = unsafe { device.create_command_pool(&pool_create_info, None).unwrap() };
+
+        let formats = unsafe {
+            surface_loader
+                .get_physical_device_surface_formats(physical_device, surface)
+                .unwrap()
+        };
+
+        let window_size = window.inner_size();
+        let scale_factor = window.scale_factor();
+
+        let swapchain_loader = swapchain::Device::new(&instance, &device);
+
+        let surface_caps = unsafe {
+            surface_loader
+                .get_physical_device_surface_capabilities(physical_device, surface)
+                .unwrap()
+        };
+
+        let mut desired_image_count = surface_caps.min_image_count + 1;
+        if surface_caps.max_image_count > 0 && desired_image_count > surface_caps.max_image_count {
+            desired_image_count = surface_caps.max_image_count;
+        }
+
+        let surface_format = formats
+            .iter()
+            .find(|f| {
+                f.format == vk::Format::B8G8R8A8_SRGB // Prefer sRGB for color
+                && f.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+            })
+            .unwrap_or(&formats[0]) // Fallback to the first available
+            .clone();
+
+        let swapchain_extent = if surface_caps.current_extent.width != u32::MAX {
+            surface_caps.current_extent
+        } else {
+            let size = window.inner_size();
+            vk::Extent2D {
+                width: size.width.clamp(
+                    surface_caps.min_image_extent.width,
+                    surface_caps.max_image_extent.width,
+                ),
+                height: size.height.clamp(
+                    surface_caps.min_image_extent.height,
+                    surface_caps.max_image_extent.height,
+                ),
+            }
+        };
+
+        let pre_transform = if surface_caps
+            .supported_transforms
+            .contains(vk::SurfaceTransformFlagsKHR::IDENTITY)
+        {
+            vk::SurfaceTransformFlagsKHR::IDENTITY
+        } else {
+            surface_caps.current_transform
+        };
+
+        let present_modes = unsafe {
+            surface_loader
+                .get_physical_device_surface_present_modes(physical_device, surface)
+                .unwrap()
+        };
+
+        let present_mode = present_modes
+            .iter()
+            .cloned()
+            .find(|&mode| mode == vk::PresentModeKHR::MAILBOX) // Prefer Mailbox for low latency
+            .unwrap_or(vk::PresentModeKHR::FIFO); // FIFO is always available
+
+        let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface)
+            .min_image_count(desired_image_count)
+            .image_format(surface_format.format)
+            .image_color_space(surface_format.color_space)
+            .image_extent(swapchain_extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT) // Could also be TRANSFER_DST for blitting
+            .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .pre_transform(pre_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(present_mode)
+            .clipped(true)
+            .old_swapchain(vk::SwapchainKHR::null()); // No old swapchain first time
+
+        let swapchain_khr = unsafe {
+            swapchain_loader
+                .create_swapchain(&swapchain_create_info, None)
+                .unwrap()
+        };
+
+        let present_queue = unsafe { device.get_device_queue(present_q_index, 0) };
+
+        self.device = Some(device.clone());
+        self.swapchain_device = Some(swapchain_loader);
+        self.swapchain_khr = Some(swapchain_khr);
+        self.swapchain_extent = Some(swapchain_extent);
+        self.graphics_queue = Some(graphics_queue);
+        self.present_queue = Some(present_queue);
+
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
+        let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            let image_available =
+                unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap();
+            let render_finished =
+                unsafe { device.create_semaphore(&semaphore_info, None) }.unwrap();
+            let in_flight = unsafe { device.create_fence(&fence_info, None) }.unwrap();
+
+            self.image_available_semaphores.push(image_available);
+            self.render_finished_semaphores.push(render_finished);
+            self.in_flight_fences.push(in_flight);
+        }
+
+        self.engine.on_gpu_resources_ready(
             &instance,
-            physical_device: vk::PhysicalDevice,
-            device: ash::Device,
-            graphics_queue: vk::Queue,
-            command_pool: vk::CommandPool,
-            swapchain_format: vk::Format,
-            window_size: PhysicalSize<u32>,
-            scale_factor: f64,
-            max_sprites: u32,
-        );*/
+            physical_device,
+            device,
+            graphics_queue,
+            command_pool,
+            surface_format.format,
+            window_size,
+            scale_factor,
+            MAX_SPRITES,
+        );
     }
 
     fn on_window_lost(&mut self) {
@@ -123,6 +293,97 @@ impl GpuResourceManager for AshGpuResourceManager {
     }
 
     fn update(&mut self) {
-        //self.engine.update();
+        if let (
+            Some(device),
+            Some(swapchain_loader),
+            Some(swapchain_khr),
+            Some(swapchain_extent),
+            Some(graphics_queue),
+            Some(present_queue),
+        ) = (
+            &self.device,
+            &self.swapchain_device,
+            &self.swapchain_khr,
+            &self.swapchain_extent,
+            &self.graphics_queue,
+            &self.present_queue,
+        ) {
+            let (image_index, _is_suboptimal) = unsafe {
+                swapchain_loader.acquire_next_image(
+                    *swapchain_khr,
+                    u64::MAX,
+                    self.image_available_semaphores[self.current_frame],
+                    vk::Fence::null(),
+                )
+            }
+            .expect("Failed to acquire next swapchain image");
+
+            let command_buffer = self.command_buffers[image_index as usize];
+
+            let render_area = vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: *swapchain_extent,
+            };
+
+            let viewport = vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: (*swapchain_extent).width as f32,
+                height: (*swapchain_extent).height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            };
+
+            let scissor = render_area;
+
+            self.engine.update(
+                command_buffer,
+                self.frame_buffers[image_index as usize],
+                render_area,
+                viewport,
+                scissor,
+            );
+
+            unsafe {
+                device.end_command_buffer(command_buffer).unwrap();
+            }
+
+            // Submit
+            let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
+            let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+            let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+
+            let command_buffers = [command_buffer];
+            let submit_info = vk::SubmitInfo::default()
+                .wait_semaphores(&wait_semaphores)
+                .wait_dst_stage_mask(&wait_stages)
+                .command_buffers(&command_buffers)
+                .signal_semaphores(&signal_semaphores);
+
+            let in_flight_fence = self.in_flight_fences[self.current_frame];
+
+            unsafe {
+                device
+                    .queue_submit(*graphics_queue, &[submit_info], in_flight_fence)
+                    .unwrap();
+            }
+
+            let swapchains = [*swapchain_khr];
+            let image_indices = [image_index];
+
+            // Present
+            let present_info = vk::PresentInfoKHR::default()
+                .wait_semaphores(&signal_semaphores)
+                .swapchains(&swapchains)
+                .image_indices(&image_indices);
+
+            unsafe {
+                swapchain_loader
+                    .queue_present(*present_queue, &present_info)
+                    .unwrap()
+            };
+
+            self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+        }
     }
 }

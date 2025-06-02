@@ -106,7 +106,8 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         window_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
     ) {
-        let phys_mem_props = unsafe { instance.get_physical_device_memory_properties(physical_device) };
+        let phys_mem_props =
+            unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
         let screen_info_cpu = ScreenInfo {
             resolution: [window_size.width as f32, window_size.height as f32],
@@ -433,8 +434,8 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
 
     pub fn render(
         &mut self,
-        cb: vk::CommandBuffer,
-        framebuffer: vk::Framebuffer,
+        command_buffer: vk::CommandBuffer,
+        frame_buffer: vk::Framebuffer,
         render_area: vk::Rect2D,
         viewport: vk::Viewport,
         scissor: vk::Rect2D,
@@ -504,34 +505,54 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                 size: staging.size,
             };
             unsafe {
-                device.cmd_copy_buffer(cb, staging.buffer, instance_buf.buffer, &[copy_region])
+                device.cmd_copy_buffer(
+                    command_buffer,
+                    staging.buffer,
+                    instance_buf.buffer,
+                    &[copy_region],
+                )
             };
 
             // We rely on pipeline barrier outside (usually automatic via synchronisation‑graph)
 
-            let rp_begin = vk::RenderPassBeginInfo::default()
+            let render_pass_begin = vk::RenderPassBeginInfo::default()
                 .render_pass(*render_pass)
-                .framebuffer(framebuffer)
+                .framebuffer(frame_buffer)
                 .render_area(render_area)
                 .clear_values(std::slice::from_ref(&BASE_CLEAR_COLOR));
 
-            unsafe { device.cmd_begin_render_pass(cb, &rp_begin, vk::SubpassContents::INLINE) };
+            unsafe {
+                device.cmd_begin_render_pass(
+                    command_buffer,
+                    &render_pass_begin,
+                    vk::SubpassContents::INLINE,
+                )
+            };
 
             unsafe {
-                device.cmd_bind_pipeline(cb, vk::PipelineBindPoint::GRAPHICS, *pipeline);
+                device.cmd_bind_pipeline(
+                    command_buffer,
+                    vk::PipelineBindPoint::GRAPHICS,
+                    *pipeline,
+                );
                 device.cmd_bind_descriptor_sets(
-                    cb,
+                    command_buffer,
                     vk::PipelineBindPoint::GRAPHICS,
                     *pipeline_layout,
                     0,
                     &[*screen_info_descriptor_set],
                     &[],
                 );
-                device.cmd_bind_vertex_buffers(cb, 0, &[quad_vbuffer.buffer], &[0]);
-                device.cmd_bind_vertex_buffers(cb, 1, &[instance_buf.buffer], &[0]);
-                device.cmd_bind_index_buffer(cb, quad_ibuffer.buffer, 0, vk::IndexType::UINT16);
-                device.cmd_set_viewport(cb, 0, &[viewport]);
-                device.cmd_set_scissor(cb, 0, &[scissor]);
+                device.cmd_bind_vertex_buffers(command_buffer, 0, &[quad_vbuffer.buffer], &[0]);
+                device.cmd_bind_vertex_buffers(command_buffer, 1, &[instance_buf.buffer], &[0]);
+                device.cmd_bind_index_buffer(
+                    command_buffer,
+                    quad_ibuffer.buffer,
+                    0,
+                    vk::IndexType::UINT16,
+                );
+                device.cmd_set_viewport(command_buffer, 0, &[viewport]);
+                device.cmd_set_scissor(command_buffer, 0, &[scissor]);
             }
 
             let mut current_set: Option<vk::DescriptorSet> = None;
@@ -543,7 +564,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                     if i as u32 > batch_start {
                         unsafe {
                             device.cmd_draw_indexed(
-                                cb,
+                                command_buffer,
                                 6,
                                 i as u32 - batch_start,
                                 0,
@@ -555,7 +576,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                     // bind new descriptor set (set = 1)
                     unsafe {
                         device.cmd_bind_descriptor_sets(
-                            cb,
+                            command_buffer,
                             vk::PipelineBindPoint::GRAPHICS,
                             *pipeline_layout,
                             1,
@@ -572,7 +593,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             if commands.len() as u32 > batch_start {
                 unsafe {
                     device.cmd_draw_indexed(
-                        cb,
+                        command_buffer,
                         6,
                         commands.len() as u32 - batch_start,
                         0,
@@ -582,7 +603,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                 };
             }
 
-            unsafe { device.cmd_end_render_pass(cb) };
+            unsafe { device.cmd_end_render_pass(command_buffer) };
 
             // Staging buffer cleaned up after submit, caller responsibility (or you can integrate
             // an arena/allocator).  For brevity we just destroy now (requires host‑idle)
