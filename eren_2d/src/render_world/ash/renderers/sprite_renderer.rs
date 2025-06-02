@@ -1,15 +1,14 @@
-use ash::{Device, Instance as AshInstance, vk};
-use bytemuck::cast_slice;
+use ash::{Device, vk};
+use bytemuck::{Pod, Zeroable, cast_slice};
 use eren_core::render_world::ash::buffer::{
     BufferResource, MemoryLocation, create_buffer_with_size,
 };
-// Aliased to avoid conflict with other Instance types
 use glam::{Mat3, Vec2};
 use std::{ffi::CStr, marker::PhantomData};
 use winit::dpi::PhysicalSize;
 
-const SPRITE_VERT_SHADER_BYTES: &[u8] = include_bytes!("sprite.vert.spv"); // Ensure path is correct
-const SPRITE_FRAG_SHADER_BYTES: &[u8] = include_bytes!("sprite.frag.spv"); // Ensure path is correct
+const SPRITE_VERT_SHADER_BYTES: &[u8] = include_bytes!("sprite.vert.spv");
+const SPRITE_FRAG_SHADER_BYTES: &[u8] = include_bytes!("sprite.frag.spv");
 
 pub fn create_shader_module(device: &Device, code: &[u8]) -> Result<vk::ShaderModule, vk::Result> {
     assert_eq!(
@@ -17,97 +16,92 @@ pub fn create_shader_module(device: &Device, code: &[u8]) -> Result<vk::ShaderMo
         0,
         "SPIR-V bytecode must be aligned to 4 bytes"
     );
-
     let mut owned = Vec::with_capacity(code.len());
     owned.extend_from_slice(code);
-
-    let code_u32 = bytemuck::cast_slice(&owned);
+    let code_u32 = cast_slice(&owned);
     let create_info = vk::ShaderModuleCreateInfo::default().code(code_u32);
     unsafe { device.create_shader_module(&create_info, None) }
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 pub struct ScreenInfo {
-    resolution: [f32; 2],
-    scale_factor: f32,
-    _padding: f32, // Ensure alignment for UBOs (often 16 bytes for vec3/mat3 members)
+    pub resolution: [f32; 2],
+    pub scale_factor: f32,
+    _padding: f32,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct Vertex {
-    pos: [f32; 2],
-    uv: [f32; 2],
+    pub pos: [f32; 2],
+    pub uv: [f32; 2],
 }
 
 const QUAD_VERTICES: [Vertex; 4] = [
     Vertex {
         pos: [-0.5, -0.5],
         uv: [0.0, 1.0],
-    }, // bottom-left
+    },
     Vertex {
         pos: [0.5, -0.5],
         uv: [1.0, 1.0],
-    }, // bottom-right
+    },
     Vertex {
         pos: [0.5, 0.5],
         uv: [1.0, 0.0],
-    }, // top-right
+    },
     Vertex {
         pos: [-0.5, 0.5],
         uv: [0.0, 0.0],
-    }, // top-left
+    },
 ];
 const QUAD_INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable)]
 struct InstanceData {
-    size: [f32; 2],
-    // Mat3 is 3x3 floats. Vulkan std140 layout for mat3 is complex.
-    // Often treated as 3 x vec4 where last component of vec4 is padding.
-    // Or, pass as 3 vec3s if shader handles it, or ensure shader expects tight packing.
-    // For simplicity, using [[f32;3];3] and hoping shader matches.
-    // More robust: use mat4 and ignore last row/col or pass as array of vec4s.
-    matrix_col0: [f32; 3], // Column 0
-    matrix_col1: [f32; 3], // Column 1
-    matrix_col2: [f32; 3], // Column 2
-    alpha: f32,
-    _padding_instance: [f32; 2], // Pad to align alpha, matrix is 9 floats, alpha 1 = 10. Next multiple of 4 is 12.
+    pub size: [f32; 2],
+    pub matrix_col0: [f32; 3],
+    pub matrix_col1: [f32; 3],
+    pub matrix_col2: [f32; 3],
+    pub alpha: f32,
+    _padding_instance: [f32; 2],
 }
 
 pub struct SpriteRenderCommand<SA> {
     pub size: Vec2,
     pub matrix: Mat3,
     pub alpha: f32,
-    pub sprite_asset_id: SA, // For potential future use or debugging, not directly used in render if set is bound
+    pub sprite_asset_id: SA,
     pub descriptor_set: vk::DescriptorSet,
 }
 
+/// ‼️ 렌더 패스 관련 로직은 모두 제거하고,
+/// 인스턴스 버퍼 생성/업데이트, 파이프라인 생성, 실제 그리기 바인딩/드로우 로직만 남깁니다.
 pub struct AshSpriteRenderer<SA>
 where
     SA: Copy + PartialEq,
 {
-    device: Option<Device>, // Use Option<Arc<Device>> if shared logic, or Option<Device>
-    phys_mem_props: Option<vk::PhysicalDeviceMemoryProperties>, // For buffer creation
+    device: Option<Device>,
+    phys_mem_props: Option<vk::PhysicalDeviceMemoryProperties>,
 
-    // Pipeline and layout related
+    // Pipeline & Layout
     pipeline_layout: Option<vk::PipelineLayout>,
     pipeline: Option<vk::Pipeline>,
 
-    // Geometry buffers
+    // Geometry Buffers (Quad)
     quad_vertex_buffer: Option<BufferResource>,
     quad_index_buffer: Option<BufferResource>,
 
-    // Per-instance data
+    // Instance Buffer (GPU 전용)
     instance_buffer: Option<BufferResource>,
-    instance_capacity: usize, // Number of InstanceData elements
+    instance_capacity: usize,
 
-    // Screen Uniform Buffer
+    // Screen UBO (단일, CPU→GPU, 매 프레임 업데이트)
     screen_info_buffer: Option<BufferResource>,
     screen_descriptor_set_layout: Option<vk::DescriptorSetLayout>,
-    screen_descriptor_pool: Option<vk::DescriptorPool>, // Own pool for screen UBO
+    screen_descriptor_pool: Option<vk::DescriptorPool>,
     screen_descriptor_set: Option<vk::DescriptorSet>,
 
     current_window_size: PhysicalSize<u32>,
@@ -140,25 +134,28 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         }
     }
 
+    ///  엔진에서 GPU 자원이 준비되었을 때 호출.
+    ///  render_pass 관련 로직은 엔진 쪽에서 다루므로 삭제했습니다.
     pub fn on_gpu_resources_ready(
         &mut self,
-        _instance_ash: &AshInstance, // Renamed to avoid conflict, _ if not used
+        _instance_ash: &ash::Instance,
         physical_device: vk::PhysicalDevice,
-        device: Device, // Take ownership or Arc
+        device: Device,
         phys_mem_props: vk::PhysicalDeviceMemoryProperties,
-        render_pass: vk::RenderPass, // Provided by GpuResourceManager
-        sprite_texture_set_layout: vk::DescriptorSetLayout, // Provided by AssetManager
+        sprite_texture_set_layout: vk::DescriptorSetLayout,
         window_size: PhysicalSize<u32>,
         scale_factor: f64,
-        // max_sprites: u32, // This determines instance_capacity if dynamic, or initial capacity
+        initial_max_sprites: usize,
     ) {
+        // 이미 초기화된 적이 있으면 정리
         if self.device.is_some() {
-            self.on_gpu_resources_lost_internal(false); // Clean up before reinitializing
+            self.on_gpu_resources_lost_internal(false);
         }
+
         self.current_window_size = window_size;
         self.current_scale_factor = scale_factor;
 
-        // --- Screen UBO and Descriptor Set (Set 0) ---
+        // 1) Screen UBO 생성 & Descriptor Set (Set = 0)
         let screen_info_data = ScreenInfo {
             resolution: [window_size.width as f32, window_size.height as f32],
             scale_factor: scale_factor as f32,
@@ -169,14 +166,14 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             &phys_mem_props,
             std::mem::size_of::<ScreenInfo>() as vk::DeviceSize,
             Some(std::slice::from_ref(&screen_info_data)),
-            vk::BufferUsageFlags::UNIFORM_BUFFER, // Not TRANSFER_DST if initialized directly and mapped
-            MemoryLocation::CpuToGpu,             // Persistently mapped for updates
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            MemoryLocation::CpuToGpu,
         );
 
         let screen_dsl_binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0) // UBO binding
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .binding(0)
             .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .stage_flags(vk::ShaderStageFlags::VERTEX);
         let screen_dsl_info = vk::DescriptorSetLayoutCreateInfo::default()
             .bindings(std::slice::from_ref(&screen_dsl_binding));
@@ -213,7 +210,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             device.update_descriptor_sets(std::slice::from_ref(&write_screen_set), &[]);
         }
 
-        // --- Quad Geometry Buffers ---
+        // 2) Quad Geometry 버퍼 생성
         let quad_vb = create_buffer_with_size(
             &device,
             &phys_mem_props,
@@ -231,7 +228,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             MemoryLocation::CpuToGpu,
         );
 
-        // --- Graphics Pipeline ---
+        // 3) Graphics Pipeline 생성
         let vs_module = create_shader_module(&device, SPRITE_VERT_SHADER_BYTES)
             .expect("Failed to create vertex shader module");
         let fs_module = create_shader_module(&device, SPRITE_FRAG_SHADER_BYTES)
@@ -262,7 +259,6 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             },
         ];
         let vertex_attr_descs = [
-            // Vertex attributes (pos, uv) from binding 0
             vk::VertexInputAttributeDescription {
                 location: 0,
                 binding: 0,
@@ -275,7 +271,6 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                 format: vk::Format::R32G32_SFLOAT,
                 offset: 8,
             },
-            // Instance attributes from binding 1
             vk::VertexInputAttributeDescription {
                 location: 2,
                 binding: 1,
@@ -287,19 +282,19 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                 binding: 1,
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: 8,
-            }, // mat_col0
+            },
             vk::VertexInputAttributeDescription {
                 location: 4,
                 binding: 1,
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: 20,
-            }, // mat_col1
+            },
             vk::VertexInputAttributeDescription {
                 location: 5,
                 binding: 1,
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: 32,
-            }, // mat_col2
+            },
             vk::VertexInputAttributeDescription {
                 location: 6,
                 binding: 1,
@@ -314,14 +309,14 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         let viewport_state = vk::PipelineViewportStateCreateInfo::default()
             .viewport_count(1)
-            .scissor_count(1); // Dynamic
+            .scissor_count(1);
         let raster_state = vk::PipelineRasterizationStateCreateInfo::default()
             .depth_clamp_enable(false)
-            .rasterizer_discard_enable(false) // Standard
+            .rasterizer_discard_enable(false)
             .polygon_mode(vk::PolygonMode::FILL)
             .line_width(1.0)
-            .cull_mode(vk::CullModeFlags::NONE) // No culling for 2D sprites usually
-            .front_face(vk::FrontFace::COUNTER_CLOCKWISE); // Or CLOCKWISE depending on quad winding
+            .cull_mode(vk::CullModeFlags::NONE)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE);
         let ms_state = vk::PipelineMultisampleStateCreateInfo::default()
             .sample_shading_enable(false)
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
@@ -332,8 +327,8 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
             .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
             .color_blend_op(vk::BlendOp::ADD)
-            .src_alpha_blend_factor(vk::BlendFactor::ONE) // Or SRC_ALPHA depending on desired alpha composition
-            .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA) // Or ZERO
+            .src_alpha_blend_factor(vk::BlendFactor::ONE)
+            .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
             .alpha_blend_op(vk::BlendOp::ADD);
         let blend_state = vk::PipelineColorBlendStateCreateInfo::default()
             .logic_op_enable(false)
@@ -343,12 +338,13 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         let dyn_state_info =
             vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-        // Pipeline Layout: Set 0 for Screen UBO, Set 1 for Sprite Texture
+        // ⇨ Pipeline Layout: Set0=Screen UBO, Set1=Sprite Texture
         let set_layouts = [screen_dsl, sprite_texture_set_layout];
         let pl_create_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
         let pipeline_layout = unsafe { device.create_pipeline_layout(&pl_create_info, None) }
             .expect("Failed to create pipeline layout");
 
+        // render_pass는 엔진에 의해 관리되므로 여기서는 PipelineCreate 정보만 설정
         let gp_create_info = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)
             .vertex_input_state(&vi_state)
@@ -359,7 +355,8 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             .color_blend_state(&blend_state)
             .dynamic_state(&dyn_state_info)
             .layout(pipeline_layout)
-            .render_pass(render_pass) // Use the render pass from GpuResourceManager
+            // render_pass, subpass 정보는 이후에 엔진에서 제공될 때 채워줘야 합니다.
+            .render_pass(vk::RenderPass::null())
             .subpass(0);
 
         let pipeline = unsafe {
@@ -372,7 +369,8 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             device.destroy_shader_module(fs_module, None);
         }
 
-        self.device = Some(device); // Store the device
+        // 모든 리소스 저장
+        self.device = Some(device);
         self.phys_mem_props = Some(phys_mem_props);
         self.pipeline_layout = Some(pipeline_layout);
         self.pipeline = Some(pipeline);
@@ -382,30 +380,25 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         self.screen_descriptor_set_layout = Some(screen_dsl);
         self.screen_descriptor_pool = Some(screen_pool);
         self.screen_descriptor_set = Some(screen_set);
-        // Instance buffer will be created on first render or with initial capacity
-        self.instance_capacity = 64; // Initial capacity, can grow
-        self.ensure_instance_buffer_capacity(self.instance_capacity);
+        self.instance_capacity = 0;
+        self.ensure_instance_buffer_capacity(initial_max_sprites);
     }
 
     fn ensure_instance_buffer_capacity(&mut self, required_capacity: usize) {
         if required_capacity == 0 {
             return;
         }
-        let device = self
-            .device
-            .as_ref()
-            .expect("Device not available for instance buffer");
+        let device = self.device.as_ref().expect("Device not available");
         let phys_mem = self
             .phys_mem_props
             .as_ref()
-            .expect("Phys mem props not available");
+            .expect("Physical device memory properties not available");
 
         if required_capacity > self.instance_capacity || self.instance_buffer.is_none() {
             if let Some(old_buffer) = self.instance_buffer.take() {
                 old_buffer.destroy(device);
             }
-            // Grow capacity, e.g., to next power of two or by a fixed factor
-            let new_capacity = required_capacity.max(self.instance_capacity * 2).max(64); // Ensure some minimum
+            let new_capacity = required_capacity.max(self.instance_capacity * 2).max(64);
             let buffer_size =
                 (std::mem::size_of::<InstanceData>() * new_capacity) as vk::DeviceSize;
 
@@ -413,9 +406,9 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                 device,
                 phys_mem,
                 buffer_size,
-                None, // No initial data
-                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, // For copying from staging
-                MemoryLocation::GpuOnly, // Optimal for vertex data accessed by GPU
+                None,
+                vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                MemoryLocation::GpuOnly,
             ));
             self.instance_capacity = new_capacity;
         }
@@ -444,11 +437,10 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                     device_ref.destroy_pipeline_layout(layout, None);
                 }
 
-                // Descriptor sets are freed with the pool
                 if let Some(pool) = self.screen_descriptor_pool.take() {
                     device_ref.destroy_descriptor_pool(pool, None);
                 }
-                self.screen_descriptor_set = None; // References a set from the now-destroyed pool
+                self.screen_descriptor_set = None;
                 if let Some(dsl) = self.screen_descriptor_set_layout.take() {
                     device_ref.destroy_descriptor_set_layout(dsl, None);
                 }
@@ -468,7 +460,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
         self.current_window_size = window_size;
         self.current_scale_factor = scale_factor;
 
-        if let (Some(device), Some(screen_buffer)) =
+        if let (Some(_device), Some(screen_buffer)) =
             (self.device.as_ref(), self.screen_info_buffer.as_ref())
         {
             if let Some(mapped_ptr) = screen_buffer.mapped_ptr {
@@ -484,77 +476,54 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
                         std::mem::size_of::<ScreenInfo>(),
                     );
                 }
-                // If not HOST_COHERENT, a flush would be needed here.
             } else {
-                // Buffer not persistently mapped, would need staging buffer to update if not CpuToGpu Coherent
-                // This example assumes CpuToGpu mapping is persistent and coherent.
                 eprintln!("Warning: Screen UBO not mapped for resize update.");
             }
         }
     }
 
-    pub fn render(
+    /// ▶ 인스턴스 버퍼(Staging → GPU) 업데이트만 수행하는 메서드
+    ///    반드시 엔진 쪽에서 `cmd_begin_render_pass` 전에 호출되어야 합니다!
+    pub fn update_instance_buffer(
         &mut self,
         cmd_buffer: vk::CommandBuffer,
-        // framebuffer: vk::Framebuffer, // This is implicitly handled by render pass begin from GpuResourceManager
-        // render_area: vk::Rect2D,    // This is implicitly handled by render pass begin from GpuResourceManager
-        viewport: vk::Viewport, // Renderer should set its own viewport/scissor if needed inside render pass
-        scissor: vk::Rect2D,
         sprite_commands: &[SpriteRenderCommand<SA>],
     ) {
         if sprite_commands.is_empty() {
             return;
         }
 
-        let device = self
-            .device
-            .as_ref()
-            .expect("Device not available for rendering");
-        let phys_mem = self
-            .phys_mem_props
-            .as_ref()
-            .expect("Phys mem props not available");
+        let device = self.device.as_ref().unwrap();
+        let phys_mem = self.phys_mem_props.as_ref().unwrap();
 
-        let required_capacity = sprite_commands.len();
-
-        if required_capacity > 0 {
-            let device = self
-                .device
-                .as_ref()
-                .expect("Device not available for instance buffer");
-            let phys_mem = self
-                .phys_mem_props
-                .as_ref()
-                .expect("Phys mem props not available");
-
-            if required_capacity > self.instance_capacity || self.instance_buffer.is_none() {
-                if let Some(old_buffer) = self.instance_buffer.take() {
-                    old_buffer.destroy(device);
+        // 1) 인스턴스 버퍼 용량 확인 및 필요 시 재생성
+        let required_count = sprite_commands.len();
+        if required_count > 0 {
+            if required_count > self.instance_capacity || self.instance_buffer.is_none() {
+                if let Some(old) = self.instance_buffer.take() {
+                    old.destroy(device);
                 }
-                // Grow capacity, e.g., to next power of two or by a fixed factor
-                let new_capacity = required_capacity.max(self.instance_capacity * 2).max(64); // Ensure some minimum
+                let new_capacity = required_count.max(self.instance_capacity * 2).max(64);
                 let buffer_size =
                     (std::mem::size_of::<InstanceData>() * new_capacity) as vk::DeviceSize;
-
                 self.instance_buffer = Some(create_buffer_with_size::<InstanceData>(
                     device,
                     phys_mem,
                     buffer_size,
-                    None, // No initial data
-                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST, // For copying from staging
-                    MemoryLocation::GpuOnly, // Optimal for vertex data accessed by GPU
+                    None,
+                    vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                    MemoryLocation::GpuOnly,
                 ));
                 self.instance_capacity = new_capacity;
             }
         }
-
         let instance_gpu_buffer = self.instance_buffer.as_ref().unwrap();
 
-        // --- Upload Instance Data via Staging Buffer ---
+        // 2) CPU → InstanceData Vec 생성
         let instance_data_cpu: Vec<InstanceData> = sprite_commands
             .iter()
             .map(|cmd| {
-                let m = cmd.matrix.to_cols_array_2d(); // [[f32; 3]; 3]
+                let m = cmd.matrix.to_cols_array_2d();
                 InstanceData {
                     size: [cmd.size.x, cmd.size.y],
                     matrix_col0: m[0],
@@ -566,6 +535,7 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             })
             .collect();
 
+        // 3) Staging 버퍼 생성 & CPU→GPU 복사
         let staging_buffer_size =
             (std::mem::size_of::<InstanceData>() * instance_data_cpu.len()) as vk::DeviceSize;
         let staging_buffer = create_buffer_with_size(
@@ -574,13 +544,14 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             staging_buffer_size,
             Some(&instance_data_cpu),
             vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryLocation::CpuToGpu, // Create, map, copy, unmap (if not persistent)
+            MemoryLocation::CpuToGpu,
         );
 
+        // 4) copy buffer & barrier (이 부분은 반드시 render pass 외부에서 수행되어야 함)
         let copy_region = vk::BufferCopy {
             src_offset: 0,
             dst_offset: 0,
-            size: staging_buffer.size,
+            size: staging_buffer_size,
         };
         unsafe {
             device.cmd_copy_buffer(
@@ -591,15 +562,14 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             );
         }
 
-        // Barrier for transfer completion before vertex input
         let buffer_barrier = vk::BufferMemoryBarrier::default()
             .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
             .dst_access_mask(vk::AccessFlags::VERTEX_ATTRIBUTE_READ)
-            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED) // No ownership transfer
+            .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .buffer(instance_gpu_buffer.buffer)
             .offset(0)
-            .size(vk::WHOLE_SIZE); // Or staging_buffer.size if more precise
+            .size(vk::WHOLE_SIZE);
         unsafe {
             device.cmd_pipeline_barrier(
                 cmd_buffer,
@@ -612,12 +582,35 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             );
         }
 
-        // --- Actual Drawing ---
-        // RenderPassBegin is handled by AshGpuResourceManager typically before calling engine.update,
-        // or engine.update calls this render function within its own render pass.
-        // This function assumes it's called *within* an active render pass.
+        // 5) staging 버퍼 파괴는 GPU가 idle 될 때까지 기다린 후 엔진에서 수행해야 합니다.
+        //    (여기서는 간단히 GPU idle 대기를 했지만, 실제 프로젝트에서는 per-frame staging을 쓰거나 FENCE 처리 권장)
+        unsafe {
+            device
+                .queue_wait_idle(device.get_device_queue(0, 0))
+                .unwrap();
+        }
+        staging_buffer.destroy(device);
+    }
+
+    /// ▶ 실제 그리기(바인딩 + 드로우)만 수행.
+    ///    반드시 `update_instance_buffer(...)` 호출 이후, 그리고 엔진 쪽에서 `cmd_begin_render_pass` 이후에 호출해야 합니다.
+    pub fn draw(
+        &self,
+        cmd_buffer: vk::CommandBuffer,
+        render_pass: vk::RenderPass,
+        framebuffer: vk::Framebuffer,
+        viewport: vk::Viewport,
+        scissor: vk::Rect2D,
+        sprite_commands: &[SpriteRenderCommand<SA>],
+    ) {
+        if sprite_commands.is_empty() {
+            return;
+        }
+
+        let device = self.device.as_ref().unwrap();
 
         unsafe {
+            // (엔진에서 이미 cmd_begin_render_pass이 호출된 상태)
             device.cmd_bind_pipeline(
                 cmd_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -626,75 +619,75 @@ impl<SA: Copy + PartialEq> AshSpriteRenderer<SA> {
             device.cmd_set_viewport(cmd_buffer, 0, &[viewport]);
             device.cmd_set_scissor(cmd_buffer, 0, &[scissor]);
 
-            // Bind common resources
+            // Set 0: Screen UBO
             device.cmd_bind_descriptor_sets(
                 cmd_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout.unwrap(),
                 0,
                 &[self.screen_descriptor_set.unwrap()],
-                &[], // Set 0: Screen UBO
+                &[],
             );
+            // Quad 정점 버퍼
             device.cmd_bind_vertex_buffers(
                 cmd_buffer,
                 0,
                 &[self.quad_vertex_buffer.as_ref().unwrap().buffer],
                 &[0],
-            ); // Quad vertices
-            device.cmd_bind_vertex_buffers(cmd_buffer, 1, &[instance_gpu_buffer.buffer], &[0]); // Instance data
+            );
+            // Instance 버퍼
+            device.cmd_bind_vertex_buffers(
+                cmd_buffer,
+                1,
+                &[self.instance_buffer.as_ref().unwrap().buffer],
+                &[0],
+            );
             device.cmd_bind_index_buffer(
                 cmd_buffer,
                 self.quad_index_buffer.as_ref().unwrap().buffer,
                 0,
                 vk::IndexType::UINT16,
-            ); // Quad indices
+            );
 
-            // Batch draw calls by descriptor set (sprite texture)
             let mut current_texture_set = vk::DescriptorSet::null();
-            let mut batch_start_instance_index = 0u32;
+            let mut batch_start = 0u32;
             for (i, sprite_cmd) in sprite_commands.iter().enumerate() {
                 if sprite_cmd.descriptor_set != current_texture_set {
-                    // Draw previous batch if any
-                    if i > batch_start_instance_index as usize {
+                    if i > batch_start as usize {
                         device.cmd_draw_indexed(
                             cmd_buffer,
-                            QUAD_INDICES.len() as u32, // indexCount
-                            (i - batch_start_instance_index as usize) as u32, // instanceCount
-                            0,                         // firstIndex
-                            0,                         // vertexOffset
-                            batch_start_instance_index, // firstInstance
+                            QUAD_INDICES.len() as u32,
+                            (i - batch_start as usize) as u32,
+                            0,
+                            0,
+                            batch_start,
                         );
                     }
-                    // Start new batch
                     current_texture_set = sprite_cmd.descriptor_set;
-                    batch_start_instance_index = i as u32;
+                    batch_start = i as u32;
                     device.cmd_bind_descriptor_sets(
                         cmd_buffer,
                         vk::PipelineBindPoint::GRAPHICS,
                         self.pipeline_layout.unwrap(),
                         1,
                         &[current_texture_set],
-                        &[], // Set 1: Sprite Texture
+                        &[],
                     );
                 }
             }
-            // Draw the last batch
-            if !sprite_commands.is_empty()
-                && (sprite_commands.len() > batch_start_instance_index as usize)
-            {
+            let total = sprite_commands.len() as u32;
+            if total > batch_start {
                 device.cmd_draw_indexed(
                     cmd_buffer,
                     QUAD_INDICES.len() as u32,
-                    (sprite_commands.len() - batch_start_instance_index as usize) as u32,
+                    total - batch_start,
                     0,
                     0,
-                    batch_start_instance_index,
+                    batch_start,
                 );
             }
+            // (엔진에서 cmd_end_render_pass을 호출)
         }
-        // RenderPassEnd is handled by AshGpuResourceManager or engine.update
-
-        staging_buffer.destroy(device); // Staging buffer can be destroyed after submit, but here is simpler for one-shot
     }
 }
 

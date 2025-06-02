@@ -665,6 +665,42 @@ impl AshGpuResourceManager {
         self.create_image_views();
         self.create_render_pass(); // Render pass might depend on new swapchain format
         self.create_framebuffers();
+
+        let new_render_pass = self.render_pass.unwrap();
+        let new_framebuffers = self.swapchain_framebuffers.clone();
+
+        let window_size = self.window.as_ref().unwrap().inner_size();
+        let scale = self.window.as_ref().unwrap().scale_factor();
+
+        // (필요하다면 먼저 engine.on_gpu_resources_lost() 를 호출)
+        self.engine.on_gpu_resources_lost();
+
+        let device_clone = self.device.as_ref().unwrap().clone();
+        let phys_mem_props = unsafe {
+            self.instance
+                .as_ref()
+                .unwrap()
+                .get_physical_device_memory_properties(self.physical_device.unwrap())
+        };
+        let graphics_queue = self.graphics_queue.unwrap();
+        let command_pool = self.command_pool.unwrap();
+        let swapchain_format = self.swapchain_format.unwrap();
+
+        self.engine.on_gpu_resources_ready(
+            self.instance.as_ref().unwrap(),
+            self.physical_device.unwrap(),
+            device_clone,
+            graphics_queue,
+            command_pool,
+            swapchain_format,
+            new_render_pass,
+            new_framebuffers,
+            window_size,
+            scale,
+            MAX_SPRITES,
+            MAX_FRAMES_IN_FLIGHT,
+        );
+
         // Command buffers might need to be re-recorded if render pass/framebuffers changed significantly.
         // Sync objects (semaphores/fences) are generally reusable.
         // images_in_flight needs to be resized and reset.
@@ -821,6 +857,12 @@ impl GpuResourceManager for AshGpuResourceManager {
             .update(command_buffer, image_index, self.current_frame);
         // --- End Engine Update ---
 
+        unsafe {
+            device
+                .end_command_buffer(command_buffer)
+                .expect("Failed to end command buffer");
+        }
+
         let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
         let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
         let wait_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -842,12 +884,6 @@ impl GpuResourceManager for AshGpuResourceManager {
                     self.in_flight_fences[self.current_frame],
                 )
                 .expect("Failed to submit draw command buffer");
-        }
-
-        unsafe {
-            device
-                .end_command_buffer(command_buffer)
-                .expect("Failed to end command buffer");
         }
 
         let swapchains = [self.swapchain_khr.unwrap()];
