@@ -25,7 +25,7 @@ void main() {
     vec3 world = mat * local;
     vec2 world_scaled = world.xy * scale_factor;
     vec2 pos_ndc = (world_scaled / resolution) * 2.0;
-    vec2 ndc_final = vec2(pos_ndc.x, -pos_ndc.y);
+    vec2 ndc_final = vec2(pos_ndc.x, pos_ndc.y);
 
     gl_Position = vec4(ndc_final, 0.0, 1.0);
     frag_uv = vec2(in_uv.x, 1.0 - in_uv.y);

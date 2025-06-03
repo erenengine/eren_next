@@ -48,7 +48,7 @@ fn main() {
         AppConfig {
             window_width: 1280,
             window_height: 720,
-            window_title: "Test Mesh".to_string(),
+            window_title: "Test Model".to_string(),
             graphics_library: GraphicsLibrary::Wgpu,
         },
         InGameScreen::new(),

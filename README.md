@@ -12,6 +12,11 @@ export VK_ICD_FILENAMES=$VULKAN_SDK/share/vulkan/icd.d/MoltenVK_icd.json
 export VK_LAYER_PATH=$VULKAN_SDK/share/vulkan/explicit_layer.d
 ```
 
+```
+glslc sprite.vert -o sprite.vert.spv
+glslc sprite.frag -o sprite.frag.spv
+```
+
 ## TODO
 - WGPU 환경에서도 단일 렌더 패스로 동작하게 변경
 
