@@ -19,6 +19,3 @@ glslc sprite.frag -o sprite.frag.spv
 
 ## TODO
 - WGPU 환경에서도 단일 렌더 패스로 동작하게 변경
-
-## 주의사항
-- macOS나 iOS에서는 MoltenVK 레이어 때문에 Vulkan(Ash) 방식이 네이티브 Metal(WGPU)보다 느립니다.
