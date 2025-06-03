@@ -19,3 +19,4 @@ glslc sprite.frag -o sprite.frag.spv
 
 ## TODO
 - WGPU 환경에서도 단일 렌더 패스로 동작하게 변경
+- Bevy 벤치마크도 알파 및 로테이션 적용

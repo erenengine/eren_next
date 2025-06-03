@@ -59,14 +59,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         let x = rng.random_range(-WINDOW_WIDTH / 2.0..WINDOW_WIDTH / 2.0);
         let y = rng.random_range(-WINDOW_HEIGHT / 2.0..WINDOW_HEIGHT / 2.0);
 
+        let scale = rng.random_range(0.5..2.0);
+        let rotation = rng.random_range(0.0..2.0 * std::f32::consts::PI);
+        let alpha = rng.random_range(0.0..1.0);
+
         let vx = rng.random_range(-SPRITE_SPEED..SPRITE_SPEED);
         let vy = rng.random_range(-SPRITE_SPEED..SPRITE_SPEED);
 
-        commands.spawn((
-            Sprite::from_image(texture_handle.clone()),
-            Transform::from_xyz(x, y, 0.0),
-            Velocity { x: vx, y: vy },
-        ));
+        let mut sprite = Sprite::from_image(texture_handle.clone());
+        sprite.color = Color::linear_rgba(1.0, 1.0, 1.0, alpha);
+
+        let mut transform = Transform::from_xyz(x, y, 0.0);
+        transform.scale = Vec3::splat(scale);
+        transform.rotation = Quat::from_rotation_z(rotation);
+
+        commands.spawn((sprite, transform, Velocity { x: vx, y: vy }));
     }
 }
 
