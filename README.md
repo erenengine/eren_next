@@ -18,5 +18,10 @@ glslc sprite.frag -o sprite.frag.spv
 ```
 
 ## TODO
+- 모바일 버전과 wasm 버전 export 및 테스트
 - WGPU 환경에서도 단일 렌더 패스로 동작하게 변경
 - Bevy 벤치마크도 알파 및 로테이션 적용
+- Rust 기반 공통 렌더러 분리, TS환경 및 .NET 환경에서 사용할 수 있도록
+- 공통 렌더 trait을 정의
+- WGPU 버전을 2.0으로, 추후 Ash까지 지원하는 버전을 3.0으로
+

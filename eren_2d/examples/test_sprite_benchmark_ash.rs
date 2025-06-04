@@ -7,7 +7,17 @@ use eren_2d::{
 };
 use eren_core::render_world::common::gpu::GraphicsLibrary;
 use glam::Vec2;
-use rand::Rng;
+
+static mut LCG_STATE: u64 = 0u64;
+
+fn random_range(start: f32, end: f32) -> f32 {
+    unsafe {
+        LCG_STATE = LCG_STATE.wrapping_mul(6364136223846793005).wrapping_add(1);
+        let random_u32 = (LCG_STATE >> 32) as u32;
+        let random_f32 = random_u32 as f32 / u32::MAX as f32;
+        start + (end - start) * random_f32
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum SpriteAssets {
@@ -87,7 +97,6 @@ impl InGameScreen {
     pub fn new() -> Self {
         let mut sprites: Vec<SpriteNode<SpriteAssets>> = Vec::with_capacity(100_000);
         let mut velocities = Vec::with_capacity(100_000);
-        let mut rng = rand::rng();
 
         let window_width = 1280.0;
         let window_height = 720.0;
@@ -95,23 +104,23 @@ impl InGameScreen {
         for _ in 0..100_000 {
             let mut sprite = SpriteNode::new(SpriteAssets::TestSprite);
 
-            let x = rng.random_range(-window_width / 2.0..window_width / 2.0);
-            let y = rng.random_range(-window_height / 2.0..window_height / 2.0);
+            let x = random_range(-window_width / 2.0, window_width / 2.0);
+            let y = random_range(-window_height / 2.0, window_height / 2.0);
             sprite.transform.set_position(Vec2::new(x, y));
 
-            let scale = rng.random_range(0.5..2.0);
+            let scale = random_range(0.5, 2.0);
             sprite.transform.set_scale(Vec2::splat(scale));
 
-            let rotation = rng.random_range(0.0..2.0 * std::f32::consts::PI);
+            let rotation = random_range(0.0, 2.0 * std::f32::consts::PI);
             sprite.transform.set_rotation(rotation);
 
-            let alpha = rng.random_range(0.0..1.0);
+            let alpha = random_range(0.0, 1.0);
             sprite.transform.set_alpha(alpha);
 
             sprites.push(sprite);
 
-            let vx = rng.random_range(-2000.0..2000.0);
-            let vy = rng.random_range(-2000.0..2000.0);
+            let vx = random_range(-2000.0, 2000.0);
+            let vy = random_range(-2000.0, 2000.0);
             velocities.push(Vec2::new(vx, vy));
         }
 

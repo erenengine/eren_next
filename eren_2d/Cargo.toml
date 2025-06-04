@@ -4,11 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ash = "0.38.0"
 bytemuck = "1.23.0"
 eren_core = { path = "../eren_core" }
 glam = "0.30.3"
 image = "0.25.6"
-rand = "0.9.1"
+wasm-bindgen = "0.2.100"
 wgpu = "25.0.2"
 winit = "0.30.11"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ash = "0.38.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.lib]
+crate-type = ["cdylib"]
