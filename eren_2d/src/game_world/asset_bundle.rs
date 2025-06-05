@@ -3,11 +3,11 @@ use std::hash::Hash;
 use super::state::GameState;
 
 pub struct AssetBundle<SA> {
-    pending_sprite_assets: Vec<(SA, String)>,
+    pending_sprite_assets: Vec<(SA, &'static str)>,
 }
 
 impl<SA: Eq + Hash + Clone> AssetBundle<SA> {
-    pub fn new(sprite_assets: Vec<(SA, String)>) -> Self {
+    pub fn new(sprite_assets: Vec<(SA, &'static str)>) -> Self {
         Self {
             pending_sprite_assets: sprite_assets,
         }
@@ -26,11 +26,18 @@ impl<SA: Eq + Hash + Clone> AssetBundle<SA> {
                 global_pending.remove(asset);
                 false
             } else {
-                global_pending.entry(asset.clone()).or_insert(path.clone());
+                if !global_pending.contains_key(asset) {
+                    global_pending.insert(asset.clone(), path);
+                }
                 true
             }
         });
 
-        self.pending_sprite_assets.is_empty()
+        if self.pending_sprite_assets.is_empty() {
+            self.pending_sprite_assets.shrink_to_fit(); // drop memory
+            return true;
+        }
+
+        false
     }
 }

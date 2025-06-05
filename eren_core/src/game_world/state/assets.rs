@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 pub struct AssetsState<A> {
     pub ready: Vec<A>,
-    pub pending: HashMap<A, String>,
+    pub pending: HashMap<A, &'static str>,
 }
 
 impl<A> AssetsState<A> {

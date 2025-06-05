@@ -1,5 +1,5 @@
 {
-  "name": "@erenengine/3d",
+  "name": "@erenengine/next_3d",
   "type": "module",
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",

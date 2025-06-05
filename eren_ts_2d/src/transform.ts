@@ -1,6 +1,6 @@
 import { mat3, vec2 } from 'gl-matrix';
 
-export class Transform {
+export class LocalTransform {
   private _position: vec2;
   private _pivot: vec2;
   private _scale: vec2;
@@ -91,7 +91,7 @@ export class GlobalTransform {
   private _translation = mat3.create();
   private _offset = vec2.create();
 
-  public update(parent: GlobalTransform, local: Transform) {
+  public update(parent: GlobalTransform, local: LocalTransform) {
     if (!parent._isDirty && !local.isDirty()) return;
 
     const t1 = this._t1;
@@ -137,4 +137,12 @@ export class GlobalTransform {
     this.finalize();
     return { matrix: this._matrix, alpha: this._alpha };
   }*/
+
+  public get matrix(): mat3 {
+    return this._matrix;
+  }
+
+  public get alpha(): number {
+    return this._alpha;
+  }
 }

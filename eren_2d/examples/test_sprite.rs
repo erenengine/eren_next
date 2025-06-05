@@ -33,7 +33,7 @@ impl GameNode<SpriteAssets> for RootNode {
         game_state: &mut GameState<SpriteAssets>,
         parent_global_transform: &GlobalTransform,
     ) {
-        if self.in_game_screen.is_asset_loaded(game_state) {
+        if self.in_game_screen.asset_bundle.is_loaded(game_state) {
             self.loading_screen = None;
         }
 
@@ -76,7 +76,7 @@ impl GameNode<SpriteAssets> for LoadingScreen {
 }
 
 struct InGameScreen {
-    asset_bundle: AssetBundle<SpriteAssets>,
+    pub asset_bundle: AssetBundle<SpriteAssets>,
     sprite: SpriteNode<SpriteAssets>,
 }
 
@@ -89,10 +89,6 @@ impl InGameScreen {
             )]),
             sprite: SpriteNode::new(SpriteAssets::TestSprite),
         }
-    }
-
-    pub fn is_asset_loaded(&mut self, game_state: &mut GameState<SpriteAssets>) -> bool {
-        self.asset_bundle.is_loaded(game_state)
     }
 }
 
