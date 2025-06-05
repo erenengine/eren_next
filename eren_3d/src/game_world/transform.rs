@@ -25,9 +25,9 @@ impl LocalTransform {
         self.position
     }
 
-    pub fn set_position(&mut self, position: Vec3) {
-        if self.position != position {
-            self.position = position;
+    pub fn set_position(&mut self, value: Vec3) {
+        if self.position != value {
+            self.position = value;
             self.is_dirty = true;
         }
     }
@@ -36,9 +36,9 @@ impl LocalTransform {
         self.pivot
     }
 
-    pub fn set_pivot(&mut self, pivot: Vec3) {
-        if self.pivot != pivot {
-            self.pivot = pivot;
+    pub fn set_pivot(&mut self, value: Vec3) {
+        if self.pivot != value {
+            self.pivot = value;
             self.is_dirty = true;
         }
     }
@@ -47,9 +47,9 @@ impl LocalTransform {
         self.scale
     }
 
-    pub fn set_scale(&mut self, scale: Vec3) {
-        if self.scale != scale {
-            self.scale = scale;
+    pub fn set_scale(&mut self, value: Vec3) {
+        if self.scale != value {
+            self.scale = value;
             self.is_dirty = true;
         }
     }
@@ -58,9 +58,9 @@ impl LocalTransform {
         self.rotation
     }
 
-    pub fn set_rotation(&mut self, rotation: Quat) {
-        if self.rotation != rotation {
-            self.rotation = rotation;
+    pub fn set_rotation(&mut self, value: Quat) {
+        if self.rotation != value {
+            self.rotation = value;
             self.is_dirty = true;
         }
     }
@@ -69,9 +69,9 @@ impl LocalTransform {
         self.alpha
     }
 
-    pub fn set_alpha(&mut self, alpha: f32) {
-        if self.alpha != alpha {
-            self.alpha = alpha;
+    pub fn set_alpha(&mut self, value: f32) {
+        if self.alpha != value {
+            self.alpha = value;
             self.is_dirty = true;
         }
     }
