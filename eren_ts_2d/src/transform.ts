@@ -1,106 +1,106 @@
 import { mat3, vec2 } from 'gl-matrix';
 
 export class LocalTransform {
-  private _position: vec2;
-  private _pivot: vec2;
-  private _scale: vec2;
-  private _rotation: number;
-  private _alpha: number;
-  private _isDirty: boolean;
+  #position: vec2;
+  #pivot: vec2;
+  #scale: vec2;
+  #rotation: number;
+  #alpha: number;
+  #isDirty: boolean;
 
   constructor() {
-    this._position = vec2.create();
-    this._pivot = vec2.create();
-    this._scale = vec2.create();
-    this._rotation = 0;
-    this._alpha = 1;
-    this._isDirty = true;
+    this.#position = vec2.create();
+    this.#pivot = vec2.create();
+    this.#scale = vec2.create();
+    this.#rotation = 0;
+    this.#alpha = 1;
+    this.#isDirty = true;
   }
 
   public get position(): vec2 {
-    return this._position;
+    return this.#position;
   }
 
   public set position(value: vec2) {
-    this._position = value;
-    this._isDirty = true;
+    this.#position = value;
+    this.#isDirty = true;
   }
 
   public get pivot(): vec2 {
-    return this._pivot;
+    return this.#pivot;
   }
 
   public set pivot(value: vec2) {
-    this._pivot = value;
-    this._isDirty = true;
+    this.#pivot = value;
+    this.#isDirty = true;
   }
 
   public get scale(): vec2 {
-    return this._scale;
+    return this.#scale;
   }
 
   public set scale(value: vec2) {
-    this._scale = value;
-    this._isDirty = true;
+    this.#scale = value;
+    this.#isDirty = true;
   }
 
   public get rotation(): number {
-    return this._rotation;
+    return this.#rotation;
   }
 
   public set rotation(value: number) {
-    this._rotation = value;
-    this._isDirty = true;
+    this.#rotation = value;
+    this.#isDirty = true;
   }
 
   public get alpha(): number {
-    return this._alpha;
+    return this.#alpha;
   }
 
   public set alpha(value: number) {
-    this._alpha = value;
-    this._isDirty = true;
+    this.#alpha = value;
+    this.#isDirty = true;
   }
 
   public isDirty(): boolean {
-    return this._isDirty;
+    return this.#isDirty;
   }
 
   public clearDirty() {
-    this._isDirty = false;
+    this.#isDirty = false;
   }
 }
 
 export class GlobalTransform {
-  private _matrix: mat3;
-  private _alpha: number;
-  private _isDirty: boolean;
+  #matrix: mat3;
+  #alpha: number;
+  #isDirty: boolean;
 
   constructor() {
-    this._matrix = mat3.create();
-    this._alpha = 1;
-    this._isDirty = false;
+    this.#matrix = mat3.create();
+    this.#alpha = 1;
+    this.#isDirty = false;
   }
 
   // 성능 최적화용: 재사용할 임시 객체
-  private _t1 = mat3.create();
-  private _r = mat3.create();
-  private _s = mat3.create();
-  private _t2 = mat3.create();
-  private _pivot_transform = mat3.create();
-  private _translation = mat3.create();
-  private _offset = vec2.create();
+  #t1 = mat3.create();
+  #r = mat3.create();
+  #s = mat3.create();
+  #t2 = mat3.create();
+  #pivot_transform = mat3.create();
+  #translation = mat3.create();
+  #offset = vec2.create();
 
   public update(parent: GlobalTransform, local: LocalTransform) {
-    if (!parent._isDirty && !local.isDirty()) return;
+    if (!parent.#isDirty && !local.isDirty()) return;
 
-    const t1 = this._t1;
-    const r = this._r;
-    const s = this._s;
-    const t2 = this._t2;
-    const pivotTransform = this._pivot_transform;
-    const translation = this._translation;
-    const offset = this._offset;
+    const t1 = this.#t1;
+    const r = this.#r;
+    const s = this.#s;
+    const t2 = this.#t2;
+    const pivotTransform = this.#pivot_transform;
+    const translation = this.#translation;
+    const offset = this.#offset;
 
     // pivot_transform = T(pivot) * R(rotation) * S(scale) * T(-pivot)
     mat3.fromTranslation(t1, local.pivot);
@@ -119,30 +119,30 @@ export class GlobalTransform {
     mat3.fromTranslation(translation, offset);
     const localMatrix = translation;
 
-    mat3.multiply(this._matrix, parent._matrix, localMatrix);
-    mat3.multiply(this._matrix, this._matrix, pivotTransform);
+    mat3.multiply(this.#matrix, parent.#matrix, localMatrix);
+    mat3.multiply(this.#matrix, this.#matrix, pivotTransform);
 
-    this._alpha = parent._alpha * local.alpha;
-    this._isDirty = true;
+    this.#alpha = parent.#alpha * local.alpha;
+    this.#isDirty = true;
 
     local.clearDirty(); // optional setter
   }
 
   public finalize() {
-    this._isDirty = false;
+    this.#isDirty = false;
   }
 
   // 아래와 같은 함수는 매 프레임마다 오브젝트를 생성시키므로, 성능에 좋지 않아 사용하지 않음
   /*public extract() {
     this.finalize();
-    return { matrix: this._matrix, alpha: this._alpha };
+    return { matrix: this.#matrix, alpha: this.#alpha };
   }*/
 
   public get matrix(): mat3 {
-    return this._matrix;
+    return this.#matrix;
   }
 
   public get alpha(): number {
-    return this._alpha;
+    return this.#alpha;
   }
 }

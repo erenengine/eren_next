@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "lib": [
       "DOM",
-      "ES2015",
+      "ESNext",
       "ScriptHost"
     ],
     "declaration": true,

@@ -10,59 +10,59 @@ enum SpriteAssets {
 }
 
 class RootNode implements GameNode<SpriteAssets> {
-  private loadingScreen?: LoadingScreen;
-  private inGameScreen: InGameScreen;
+  #loadingScreen?: LoadingScreen;
+  #inGameScreen: InGameScreen;
 
   constructor() {
-    this.loadingScreen = new LoadingScreen();
-    this.inGameScreen = new InGameScreen();
+    this.#loadingScreen = new LoadingScreen();
+    this.#inGameScreen = new InGameScreen();
   }
 
   update(gameState: GameState<SpriteAssets>, parentGlobalTransform: GlobalTransform): void {
-    if (this.inGameScreen.assetBundle.isLoaded(gameState)) {
-      this.loadingScreen = undefined;
+    if (this.#inGameScreen.assetBundle.isLoaded(gameState)) {
+      this.#loadingScreen = undefined;
     }
 
-    if (this.loadingScreen) {
-      this.loadingScreen.update(gameState, parentGlobalTransform);
+    if (this.#loadingScreen) {
+      this.#loadingScreen.update(gameState, parentGlobalTransform);
     } else {
-      this.inGameScreen.update(gameState, parentGlobalTransform);
+      this.#inGameScreen.update(gameState, parentGlobalTransform);
     }
   }
 }
 
 class LoadingScreen implements GameNode<SpriteAssets> {
-  private assetBundle: AssetBundle<SpriteAssets>;
-  private logo: SpriteNode<SpriteAssets>;
+  #assetBundle: AssetBundle<SpriteAssets>;
+  #logo: SpriteNode<SpriteAssets>;
 
   constructor() {
-    this.assetBundle = new AssetBundle<SpriteAssets>(new Map([
+    this.#assetBundle = new AssetBundle<SpriteAssets>(new Map([
       [SpriteAssets.Logo, "examples/assets/logo.png"],
     ]));
-    this.logo = new SpriteNode(SpriteAssets.Logo);
+    this.#logo = new SpriteNode(SpriteAssets.Logo);
   }
 
   update(gameState: GameState<SpriteAssets>, parentGlobalTransform: GlobalTransform): void {
-    if (this.assetBundle.isLoaded(gameState)) {
-      this.logo.update(gameState, parentGlobalTransform);
+    if (this.#assetBundle.isLoaded(gameState)) {
+      this.#logo.update(gameState, parentGlobalTransform);
     }
   }
 }
 
 class InGameScreen implements GameNode<SpriteAssets> {
   assetBundle: AssetBundle<SpriteAssets>;
-  private sprite: SpriteNode<SpriteAssets>;
+  #sprite: SpriteNode<SpriteAssets>;
 
   constructor() {
     this.assetBundle = new AssetBundle<SpriteAssets>(new Map([
       [SpriteAssets.TestSprite, "examples/assets/test_sprite.png"],
     ]));
-    this.sprite = new SpriteNode(SpriteAssets.TestSprite);
+    this.#sprite = new SpriteNode(SpriteAssets.TestSprite);
   }
 
   update(gameState: GameState<SpriteAssets>, parentGlobalTransform: GlobalTransform): void {
     if (this.assetBundle.isLoaded(gameState)) {
-      this.sprite.update(gameState, parentGlobalTransform);
+      this.#sprite.update(gameState, parentGlobalTransform);
     }
   }
 }
