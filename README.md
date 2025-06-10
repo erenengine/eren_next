@@ -1,5 +1,7 @@
-# eren_next
-다음 버전의 에렌엔진을 작업하는 소스코드 저장소입니다.
+# 에렌 엔진
+에렌 엔진은 코드 중심의 게임 엔진입니다.
+
+> ⚠️ 이 프로젝트는 현재 개발 중입니다. 주요 기능과 문서가 변경될 수 있습니다.
 
 * TypeScript 버전의 경우, Rust 버전을 백엔드로 사용하고 TypeScript로는 로직을 구현합니다.
 * Rust Wasm 타겟은 wgpu를 사용하며 WGSL로 쉐이더 코드를 작성합니다.
@@ -20,3 +22,6 @@ glslc sprite.frag -o sprite.frag.spv
 ## TODO
 - WGPU 버전을 2.0으로, 추후 Ash까지 지원하는 버전을 3.0으로
 
+## 커뮤니티
+- [네이버 카페](https://cafe.naver.com/erenengine)
+- [디스코드](https://discord.gg/VyeJKK4c7J)
