@@ -2,3 +2,8 @@
 name = "eren_render_core"
 version = "0.1.0"
 edition = "2024"
+
+[dependencies]
+eren_window = { path = "../eren_window" }
+wgpu = "25.0.2"
+winit = "0.30.11"
