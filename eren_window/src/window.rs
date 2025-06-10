@@ -7,11 +7,12 @@ use winit::{
 };
 
 pub struct WindowConfig {
-    pub window_width: u32,
-    pub window_height: u32,
-    pub window_title: &'static str,
+    pub width: u32,
+    pub height: u32,
+    pub title: &'static str,
 }
 
+#[derive(Copy, Clone, PartialEq)]
 pub struct WindowSize {
     pub width: u32,
     pub height: u32,
@@ -29,6 +30,7 @@ pub struct WindowLifecycleManager<E: WindowEventHandler> {
     config: WindowConfig,
     event_handler: E,
     window: Option<Window>,
+    current_window_size: Option<WindowSize>,
 }
 
 impl<E: WindowEventHandler> WindowLifecycleManager<E> {
@@ -37,6 +39,14 @@ impl<E: WindowEventHandler> WindowLifecycleManager<E> {
             config,
             event_handler,
             window: None,
+            current_window_size: None,
+        }
+    }
+
+    fn handle_resize_event(&mut self, new_size: WindowSize) {
+        if self.current_window_size != Some(new_size) {
+            self.current_window_size = Some(new_size);
+            self.event_handler.on_window_resized(new_size);
         }
     }
 
@@ -61,11 +71,8 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
             let window = event_loop
                 .create_window(
                     Window::default_attributes()
-                        .with_title(self.config.window_title)
-                        .with_inner_size(LogicalSize::new(
-                            self.config.window_width,
-                            self.config.window_height,
-                        )),
+                        .with_title(self.config.title)
+                        .with_inner_size(LogicalSize::new(self.config.width, self.config.height)),
                 )
                 .unwrap();
 
@@ -79,7 +86,7 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
         match event {
             WindowEvent::Resized(size) => {
                 if let Some(window) = &self.window {
-                    self.event_handler.on_window_resized(WindowSize {
+                    self.handle_resize_event(WindowSize {
                         width: size.width,
                         height: size.height,
                         scale_factor: window.scale_factor(),
@@ -91,9 +98,10 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
                 if let Some(window) = &self.window {
-                    self.event_handler.on_window_resized(WindowSize {
-                        width: window.inner_size().width,
-                        height: window.inner_size().height,
+                    let inner = window.inner_size();
+                    self.handle_resize_event(WindowSize {
+                        width: inner.width,
+                        height: inner.height,
                         scale_factor,
                     });
                 }
