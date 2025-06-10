@@ -1,6 +1,7 @@
 use eren_window::window::WindowSize;
 use winit::window::Window;
 
+#[derive(Debug)]
 pub struct FrameContext {}
 
 pub struct GraphicsContext<F>

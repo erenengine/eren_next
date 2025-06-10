@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use eren_window::window::WindowSize;
 use winit::window::Window;
 
+#[derive(Debug)]
 pub struct FrameContext<'a> {
     pub view: &'a wgpu::TextureView,
     pub encoder: &'a mut wgpu::CommandEncoder,
@@ -35,10 +38,10 @@ where
         }
     }
 
-    pub async fn init(&mut self, window: &'a Window) {
+    pub async fn init(&mut self, window: Arc<Window>) {
         let surface = self
             .instance
-            .create_surface(window)
+            .create_surface(window.clone())
             .expect("Failed to create surface");
 
         let adapter = self

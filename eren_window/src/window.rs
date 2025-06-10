@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -12,7 +14,7 @@ pub struct WindowConfig {
     pub title: &'static str,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct WindowSize {
     pub width: u32,
     pub height: u32,
@@ -20,7 +22,7 @@ pub struct WindowSize {
 }
 
 pub trait WindowEventHandler {
-    fn on_window_ready(&mut self, window: &Window);
+    fn on_window_ready(&mut self, window: Arc<Window>);
     fn on_window_lost(&mut self);
     fn on_window_resized(&mut self, size: WindowSize);
     fn redraw(&mut self);
@@ -29,7 +31,7 @@ pub trait WindowEventHandler {
 pub struct WindowLifecycleManager<E: WindowEventHandler> {
     config: WindowConfig,
     event_handler: E,
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     current_window_size: Option<WindowSize>,
 }
 
@@ -44,6 +46,11 @@ impl<E: WindowEventHandler> WindowLifecycleManager<E> {
     }
 
     fn handle_resize_event(&mut self, new_size: WindowSize) {
+        // (0,0)은 일부 플랫폼에서 초기화 과정에서 나오는 값이므로 무시
+        if new_size.width == 0 || new_size.height == 0 {
+            return;
+        }
+
         if self.current_window_size != Some(new_size) {
             self.current_window_size = Some(new_size);
             self.event_handler.on_window_resized(new_size);
@@ -68,15 +75,20 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let window = event_loop
-                .create_window(
-                    Window::default_attributes()
-                        .with_title(self.config.title)
-                        .with_inner_size(LogicalSize::new(self.config.width, self.config.height)),
-                )
-                .unwrap();
+            let window = Arc::new(
+                event_loop
+                    .create_window(
+                        Window::default_attributes()
+                            .with_title(self.config.title)
+                            .with_inner_size(LogicalSize::new(
+                                self.config.width,
+                                self.config.height,
+                            )),
+                    )
+                    .unwrap(),
+            );
 
-            self.event_handler.on_window_ready(&window);
+            self.event_handler.on_window_ready(window.clone());
 
             self.window = Some(window);
         }
