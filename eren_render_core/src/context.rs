@@ -54,8 +54,13 @@ where
             .await
             .expect("Failed to request adapter");
 
+        let limits = adapter.limits();
+
+        let mut request_device_descriptor = wgpu::DeviceDescriptor::default();
+        request_device_descriptor.required_limits = limits;
+
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
+            .request_device(&request_device_descriptor)
             .await
             .expect("Failed to request device");
 
