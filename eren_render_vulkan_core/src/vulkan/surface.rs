@@ -7,8 +7,8 @@ use winit::{
 use crate::vulkan::instance::VulkanInstanceManager;
 
 pub struct SurfaceManager {
-    surface_loader: khr::surface::Instance,
-    surface: vk::SurfaceKHR,
+    pub surface_loader: khr::surface::Instance,
+    pub surface: vk::SurfaceKHR,
 }
 
 impl SurfaceManager {

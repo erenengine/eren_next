@@ -39,7 +39,8 @@ where
     pub fn init(&mut self, window: &Window) {
         let instance_manager = VulkanInstanceManager::new(&self.entry, window);
         let surface_manager = SurfaceManager::new(&self.entry, &instance_manager, window);
-        let physical_device_manager = PhysicalDeviceManager::new(&instance_manager);
+        let physical_device_manager =
+            PhysicalDeviceManager::new(&instance_manager, &surface_manager);
 
         self.instance_manager = Some(instance_manager);
         self.surface_manager = Some(surface_manager);
