@@ -56,7 +56,7 @@ fn main() {
             title: "Test Window",
         },
         TestWindowEventHandler {
-            graphics_context: GraphicsContext::new("Test Window", draw_frame),
+            graphics_context: GraphicsContext::new(draw_frame),
         },
     )
     .start_event_loop();
