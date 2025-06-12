@@ -7,14 +7,14 @@ use ash::{khr, vk};
 use crate::vulkan::{instance::VulkanInstanceManager, surface::SurfaceManager};
 
 struct QueueFamilyIndices {
-    found_graphics_queue_family_index: Option<u32>,
-    found_presentation_queue_family_index: Option<u32>,
+    graphics_queue_family_index: Option<u32>,
+    presentation_queue_family_index: Option<u32>,
 }
 
 impl QueueFamilyIndices {
     fn found(&self) -> bool {
-        self.found_graphics_queue_family_index.is_some()
-            && self.found_presentation_queue_family_index.is_some()
+        self.graphics_queue_family_index.is_some()
+            && self.presentation_queue_family_index.is_some()
     }
 }
 
@@ -90,22 +90,22 @@ impl PhysicalDeviceManager {
         device: vk::PhysicalDevice,
     ) -> QueueFamilyIndices {
         let mut indices = QueueFamilyIndices {
-            found_graphics_queue_family_index: None,
-            found_presentation_queue_family_index: None,
+            graphics_queue_family_index: None,
+            presentation_queue_family_index: None,
         };
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(device) };
 
         for (i, queue_family) in queue_families.iter().enumerate() {
             if queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                indices.found_graphics_queue_family_index = Some(i as u32);
+                indices.graphics_queue_family_index = Some(i as u32);
             }
             let present_support = unsafe {
                 surface_loader.get_physical_device_surface_support(device, i as u32, surface)
             }
             .unwrap_or(false);
             if present_support {
-                indices.found_presentation_queue_family_index = Some(i as u32);
+                indices.presentation_queue_family_index = Some(i as u32);
             }
             if indices.found() {
                 break;

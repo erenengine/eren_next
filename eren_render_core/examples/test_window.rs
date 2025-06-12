@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use eren_render_core::context::{FrameContext, GraphicsContext};
-use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
+use eren_window::{
+    error::handle_fatal_error,
+    window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
+};
 use winit::window::Window;
 
 struct TestWindowEventHandler<'a, F>
@@ -40,13 +43,16 @@ where
     fn redraw(&mut self) {
         //println!("Redraw");
 
-        self.graphics_context.redraw().expect("Failed to redraw");
+        match self.graphics_context.redraw() {
+            Ok(_) => {}
+            Err(e) => handle_fatal_error(e, "Failed to redraw"),
+        }
     }
 }
 
 fn main() {
     let draw_frame = |frame_context: &FrameContext| {
-        println!("Draw frame: {:?}", frame_context);
+        //println!("Draw frame: {:?}", frame_context);
     };
 
     WindowLifecycleManager::new(

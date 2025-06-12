@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use eren_window::window::WindowSize;
+use eren_window::{error::handle_fatal_error, window::WindowSize};
 use winit::window::Window;
 
 #[derive(Debug)]
@@ -39,12 +39,12 @@ where
     }
 
     pub async fn init(&mut self, window: Arc<Window>) {
-        let surface = self
-            .instance
-            .create_surface(window.clone())
-            .expect("Failed to create surface");
+        let surface = match self.instance.create_surface(window.clone()) {
+            Ok(s) => s,
+            Err(e) => handle_fatal_error(e, "Failed to create surface"),
+        };
 
-        let adapter = self
+        let adapter = match self
             .instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -52,17 +52,20 @@ where
                 force_fallback_adapter: false,
             })
             .await
-            .expect("Failed to request adapter");
+        {
+            Ok(a) => a,
+            Err(e) => handle_fatal_error(e, "Failed to request adapter"),
+        };
 
         let limits = adapter.limits();
 
         let mut request_device_descriptor = wgpu::DeviceDescriptor::default();
         request_device_descriptor.required_limits = limits;
 
-        let (device, queue) = adapter
-            .request_device(&request_device_descriptor)
-            .await
-            .expect("Failed to request device");
+        let (device, queue) = match adapter.request_device(&request_device_descriptor).await {
+            Ok((d, q)) => (d, q),
+            Err(e) => handle_fatal_error(e, "Failed to request device"),
+        };
 
         let surface_caps = surface.get_capabilities(&adapter);
 
