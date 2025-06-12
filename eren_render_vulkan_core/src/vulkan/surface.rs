@@ -5,8 +5,6 @@ use winit::{
     window::Window,
 };
 
-use crate::vulkan::instance::VulkanInstanceManager;
-
 #[derive(Debug, Error)]
 pub enum SurfaceManagerError {
     #[error("Failed to create surface: {0}")]
@@ -21,15 +19,15 @@ pub struct SurfaceManager {
 impl SurfaceManager {
     pub fn new(
         entry: &ash::Entry,
-        instance_manager: &VulkanInstanceManager,
+        instance: &ash::Instance,
         window: &Window,
     ) -> Result<Self, SurfaceManagerError> {
-        let surface_loader = khr::surface::Instance::new(entry, &instance_manager.instance);
+        let surface_loader = khr::surface::Instance::new(entry, instance);
 
         let surface = unsafe {
             ash_window::create_surface(
                 entry,
-                &instance_manager.instance,
+                instance,
                 window.display_handle().unwrap().as_raw(),
                 window.window_handle().unwrap().as_raw(),
                 None,

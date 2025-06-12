@@ -1,200 +1,118 @@
-//TODO: 개선 필요
-
-use std::ffi::CStr;
-
-use ash::{khr, vk};
+use ash::{khr::surface, vk};
 use thiserror::Error;
 
-use crate::vulkan::{instance::VulkanInstanceManager, surface::SurfaceManager};
+use crate::vulkan::{
+    queue::{QueueFamilyIndices, find_queue_family_indices},
+    swapchain::{SwapchainSupportDetails, SwapchainSupportError, get_swapchain_support_details},
+};
 
 #[derive(Debug, Error)]
 pub enum PhysicalDeviceManagerError {
     #[error("Failed to enumerate physical devices: {0}")]
     EnumeratePhysicalDevicesFailed(String),
 
-    #[error("Failed to find a suitable GPU")]
-    FindSuitableGpuFailed,
-}
+    #[error("Swapchain support query failed: {0}")]
+    SwapchainSupportQueryFailed(#[from] SwapchainSupportError),
 
-#[derive(Debug, Error)]
-pub enum SwapChainManagerError {
-    #[error("Failed to enumerate swapchain support: {0}")]
-    EnumerateSwapchainSupportFailed(String),
-    //TODO
-}
-
-pub struct QueueFamilyIndices {
-    graphics_queue_family_index: Option<u32>,
-    presentation_queue_family_index: Option<u32>,
-}
-
-impl QueueFamilyIndices {
-    fn found(&self) -> bool {
-        self.graphics_queue_family_index.is_some() && self.presentation_queue_family_index.is_some()
-    }
-}
-
-struct SwapChainSupportDetails {
-    capabilities: vk::SurfaceCapabilitiesKHR,
-    formats: Vec<vk::SurfaceFormatKHR>,
-    present_modes: Vec<vk::PresentModeKHR>,
+    #[error("No suitable physical device found")]
+    NoSuitablePhysicalDevice,
 }
 
 pub struct PhysicalDeviceManager {
-    physical_device: vk::PhysicalDevice,
-    queue_family_indices: QueueFamilyIndices,
+    pub queue_family_indices: QueueFamilyIndices,
+    pub swapchain_support_details: SwapchainSupportDetails,
+    pub physical_device: vk::PhysicalDevice,
 }
 
 impl PhysicalDeviceManager {
     pub fn new(
-        instance_manager: &VulkanInstanceManager,
-        surface_manager: &SurfaceManager,
+        instance: &ash::Instance,
+        surface_loader: &surface::Instance,
+        surface: vk::SurfaceKHR,
     ) -> Result<Self, PhysicalDeviceManagerError> {
         let physical_devices = unsafe {
-            instance_manager
-                .instance
-                .enumerate_physical_devices()
-                .map_err(|e| {
-                    PhysicalDeviceManagerError::EnumeratePhysicalDevicesFailed(e.to_string())
-                })?
+            instance.enumerate_physical_devices().map_err(|e| {
+                PhysicalDeviceManagerError::EnumeratePhysicalDevicesFailed(e.to_string())
+            })?
         };
 
-        let (physical_device, queue_family_indices) = physical_devices
-            .into_iter()
-            .find_map(|physical_device| {
-                let queue_family_indices = Self::find_queue_families(
-                    &instance_manager.instance,
-                    &surface_manager.surface_loader,
-                    surface_manager.surface,
-                    physical_device,
-                );
-                let extensions_supported = Self::check_device_extension_support(
-                    &instance_manager.instance,
-                    physical_device,
-                );
-                let swapchain_adequate = if extensions_supported {
-                    let swapchain_support = Self::query_swapchain_support(
-                        &surface_manager.surface_loader,
-                        surface_manager.surface,
-                        physical_device,
-                    );
-                    !swapchain_support.formats.is_empty()
-                        && !swapchain_support.present_modes.is_empty()
-                } else {
-                    false
-                };
-
-                // Check for features
-                let features = unsafe {
-                    instance_manager
-                        .instance
-                        .get_physical_device_features(physical_device)
-                };
-                let supported_features = features.shader_clip_distance == vk::TRUE;
-
-                if queue_family_indices.found()
-                    && extensions_supported
-                    && swapchain_adequate
-                    && supported_features
-                {
-                    Some((physical_device, queue_family_indices))
-                } else {
-                    None
-                }
-            })
-            .ok_or(PhysicalDeviceManagerError::FindSuitableGpuFailed)?;
-
-        Ok(Self {
-            physical_device,
-            queue_family_indices,
-        })
-    }
-
-    fn find_queue_families(
-        instance: &ash::Instance,
-        surface_loader: &khr::surface::Instance,
-        surface: vk::SurfaceKHR,
-        device: vk::PhysicalDevice,
-    ) -> QueueFamilyIndices {
-        let mut indices = QueueFamilyIndices {
-            graphics_queue_family_index: None,
-            presentation_queue_family_index: None,
-        };
-        let queue_families =
-            unsafe { instance.get_physical_device_queue_family_properties(device) };
-
-        for (i, queue_family) in queue_families.iter().enumerate() {
-            if queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                indices.graphics_queue_family_index = Some(i as u32);
+        for physical_device in physical_devices {
+            if !has_required_device_features(instance, physical_device)
+                || !has_required_device_extensions(instance, physical_device)
+            {
+                continue;
             }
-            let present_support = unsafe {
-                surface_loader.get_physical_device_surface_support(device, i as u32, surface)
-            }
-            .unwrap_or(false);
-            if present_support {
-                indices.presentation_queue_family_index = Some(i as u32);
-            }
-            if indices.found() {
-                break;
-            }
-        }
-        indices
-    }
 
-    fn get_required_device_extensions() -> Vec<&'static CStr> {
-        let mut extensions = vec![khr::swapchain::NAME];
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            extensions.push(ash::khr::portability_subset::NAME);
-        }
-        extensions
-    }
+            let queue_family_indices =
+                find_queue_family_indices(instance, surface_loader, surface, physical_device);
+            if !queue_family_indices.is_complete() {
+                continue;
+            }
 
-    fn check_device_extension_support(
-        instance: &ash::Instance,
-        device: vk::PhysicalDevice,
-    ) -> bool {
-        let available_extensions = unsafe {
-            instance
-                .enumerate_device_extension_properties(device)
-                .unwrap_or_else(|_| Vec::new())
-        };
-        let required_extensions = Self::get_required_device_extensions();
+            let swapchain_support_details =
+                get_swapchain_support_details(surface_loader, surface, physical_device)?;
+            if swapchain_support_details.formats.is_empty()
+                || swapchain_support_details.present_modes.is_empty()
+            {
+                continue;
+            }
 
-        for required_ext_name_cstr in required_extensions.iter() {
-            let required_ext_name = unsafe { CStr::from_ptr(required_ext_name_cstr.as_ptr()) };
-            let found = available_extensions.iter().any(|ext| {
-                let avail_ext_name = unsafe { CStr::from_ptr(ext.extension_name.as_ptr()) };
-                avail_ext_name == required_ext_name
+            return Ok(Self {
+                queue_family_indices,
+                swapchain_support_details,
+                physical_device,
             });
-            if !found {
-                return false;
-            }
         }
-        true
+
+        Err(PhysicalDeviceManagerError::NoSuitablePhysicalDevice)
+    }
+}
+
+fn has_required_device_features(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+) -> bool {
+    let features = unsafe { instance.get_physical_device_features(physical_device) };
+
+    if features.shader_clip_distance != vk::TRUE {
+        return false;
     }
 
-    fn query_swapchain_support(
-        surface_loader: &khr::surface::Instance,
-        surface: vk::SurfaceKHR,
-        device: vk::PhysicalDevice,
-    ) -> SwapChainSupportDetails {
-        unsafe {
-            //TODO: Error handling
-            let capabilities = surface_loader
-                .get_physical_device_surface_capabilities(device, surface)
-                .expect("Failed to query surface capabilities");
-            let formats = surface_loader
-                .get_physical_device_surface_formats(device, surface)
-                .expect("Failed to query surface formats");
-            let present_modes = surface_loader
-                .get_physical_device_surface_present_modes(device, surface)
-                .expect("Failed to query surface present modes");
-            SwapChainSupportDetails {
-                capabilities,
-                formats,
-                present_modes,
-            }
+    true
+}
+
+fn has_required_device_extensions(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+) -> bool {
+    let extensions = unsafe {
+        instance
+            .enumerate_device_extension_properties(physical_device)
+            .unwrap_or_else(|_| Vec::new())
+    };
+
+    let mut required_extensions = vec![ash::khr::swapchain::NAME];
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        required_extensions.push(ash::khr::portability_subset::NAME);
+    }
+
+    for required_ext_name_cstr in required_extensions.iter() {
+        let required_ext_name =
+            unsafe { std::ffi::CStr::from_ptr(required_ext_name_cstr.as_ptr()) };
+
+        let found = extensions.iter().any(|ext| {
+            let available_ext_name =
+                unsafe { std::ffi::CStr::from_ptr(ext.extension_name.as_ptr()) };
+
+            available_ext_name == required_ext_name
+        });
+
+        if !found {
+            return false;
         }
     }
+
+    true
 }

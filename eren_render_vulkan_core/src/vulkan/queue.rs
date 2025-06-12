@@ -1,12 +1,12 @@
 use ash::vk;
 
 pub struct QueueFamilyIndices {
-    graphics_queue_family_index: Option<u32>,
-    present_queue_family_index: Option<u32>,
+    pub graphics_queue_family_index: Option<u32>,
+    pub present_queue_family_index: Option<u32>,
 }
 
 impl QueueFamilyIndices {
-    fn is_complete(&self) -> bool {
+    pub fn is_complete(&self) -> bool {
         self.graphics_queue_family_index.is_some() && self.present_queue_family_index.is_some()
     }
 }
