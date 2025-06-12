@@ -1,5 +1,6 @@
 use ash::vk;
 
+#[derive(Debug)]
 pub struct QueueFamilyIndices {
     pub graphics_queue_family_index: Option<u32>,
     pub present_queue_family_index: Option<u32>,

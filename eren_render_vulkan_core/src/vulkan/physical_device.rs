@@ -1,4 +1,7 @@
-use ash::{khr::surface, vk};
+use ash::{
+    khr::{surface, swapchain},
+    vk,
+};
 use thiserror::Error;
 
 use crate::vulkan::{
@@ -68,6 +71,10 @@ impl PhysicalDeviceManager {
     }
 }
 
+pub fn get_required_device_features() -> vk::PhysicalDeviceFeatures {
+    vk::PhysicalDeviceFeatures::default().shader_clip_distance(true)
+}
+
 fn has_required_device_features(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
@@ -81,6 +88,17 @@ fn has_required_device_features(
     true
 }
 
+pub fn get_required_device_extensions() -> Vec<&'static std::ffi::CStr> {
+    let mut required_extensions = vec![ash::khr::swapchain::NAME];
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        required_extensions.push(ash::khr::portability_subset::NAME);
+    }
+
+    required_extensions
+}
+
 fn has_required_device_extensions(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
@@ -91,12 +109,7 @@ fn has_required_device_extensions(
             .unwrap_or_else(|_| Vec::new())
     };
 
-    let mut required_extensions = vec![ash::khr::swapchain::NAME];
-
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    {
-        required_extensions.push(ash::khr::portability_subset::NAME);
-    }
+    let required_extensions = get_required_device_extensions();
 
     for required_ext_name_cstr in required_extensions.iter() {
         let required_ext_name =
