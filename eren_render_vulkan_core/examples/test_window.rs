@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use eren_render_core::context::{FrameContext, GraphicsContext};
-use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
+use eren_window::{
+    error::show_error_popup_and_panic,
+    window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
+};
 use winit::window::Window;
 
 struct TestWindowEventHandler<F>
@@ -22,7 +25,10 @@ where
             window.inner_size().height
         );
 
-        self.graphics_context.init(&window);
+        match self.graphics_context.init(&window) {
+            Ok(_) => {}
+            Err(e) => show_error_popup_and_panic(e, "Failed to initialize graphics context"),
+        }
     }
 
     fn on_window_lost(&mut self) {
@@ -56,7 +62,10 @@ fn main() {
             title: "Test Window",
         },
         TestWindowEventHandler {
-            graphics_context: GraphicsContext::new(draw_frame),
+            graphics_context: match GraphicsContext::new(draw_frame) {
+                Ok(graphics_context) => graphics_context,
+                Err(e) => show_error_popup_and_panic(e, "Failed to create graphics context"),
+            },
         },
     )
     .start_event_loop();

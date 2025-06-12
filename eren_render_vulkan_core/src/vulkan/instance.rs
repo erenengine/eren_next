@@ -1,5 +1,18 @@
 use ash::vk;
+use thiserror::Error;
 use winit::{raw_window_handle::HasDisplayHandle, window::Window};
+
+#[derive(Debug, Error)]
+pub enum VulkanInstanceManagerError {
+    #[error("Failed to enumerate required extensions: {0}")]
+    ExtensionEnumerationFailed(String),
+
+    #[error("Failed to create instance: {0}")]
+    CreateInstanceFailed(String),
+
+    #[error("Failed to create debug utils messenger: {0}")]
+    CreateDebugUtilsMessengerFailed(String),
+}
 
 pub struct VulkanInstanceManager {
     pub instance: ash::Instance,
@@ -8,7 +21,7 @@ pub struct VulkanInstanceManager {
 }
 
 impl VulkanInstanceManager {
-    pub fn new(entry: &ash::Entry, window: &Window) -> Self {
+    pub fn new(entry: &ash::Entry, window: &Window) -> Result<Self, VulkanInstanceManagerError> {
         let app_name = std::ffi::CString::new(window.title()).unwrap();
         let engine_name = std::ffi::CString::new("ErenEngine").unwrap();
 
@@ -29,7 +42,7 @@ impl VulkanInstanceManager {
 
         let mut extension_name_pointers: Vec<*const i8> =
             ash_window::enumerate_required_extensions(window.display_handle().unwrap().as_raw())
-                .expect("Failed to enumerate required extensions")
+                .map_err(|e| VulkanInstanceManagerError::ExtensionEnumerationFailed(e.to_string()))?
                 .to_vec();
 
         extension_name_pointers.push(ash::ext::debug_utils::NAME.as_ptr());
@@ -69,21 +82,23 @@ impl VulkanInstanceManager {
         let instance = unsafe {
             entry
                 .create_instance(&instance_create_info, None)
-                .expect("Failed to create instance")
+                .map_err(|e| VulkanInstanceManagerError::CreateInstanceFailed(e.to_string()))?
         };
 
         let debug_utils_loader = ash::ext::debug_utils::Instance::new(&entry, &instance);
         let debug_utils_messenger = unsafe {
             debug_utils_loader
                 .create_debug_utils_messenger(&debug_create_info, None)
-                .expect("Failed to create debug utils messenger")
+                .map_err(|e| {
+                    VulkanInstanceManagerError::CreateDebugUtilsMessengerFailed(e.to_string())
+                })?
         };
 
-        Self {
+        Ok(Self {
             instance,
             debug_utils_loader,
             debug_utils_messenger,
-        }
+        })
     }
 }
 

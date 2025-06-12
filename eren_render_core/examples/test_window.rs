@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use eren_render_core::context::{FrameContext, GraphicsContext};
 use eren_window::{
-    error::handle_fatal_error,
+    error::show_error_popup_and_panic,
     window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
 };
 use winit::window::Window;
@@ -25,7 +25,10 @@ where
             window.inner_size().height
         );
 
-        pollster::block_on(self.graphics_context.init(window));
+        match pollster::block_on(self.graphics_context.init(window)) {
+            Ok(_) => {}
+            Err(e) => show_error_popup_and_panic(e, "Failed to initialize graphics context"),
+        }
     }
 
     fn on_window_lost(&mut self) {
@@ -45,7 +48,7 @@ where
 
         match self.graphics_context.redraw() {
             Ok(_) => {}
-            Err(e) => handle_fatal_error(e, "Failed to redraw"),
+            Err(e) => show_error_popup_and_panic(e, "Failed to redraw"),
         }
     }
 }

@@ -7,4 +7,5 @@ edition = "2024"
 ash = "0.38.0"
 ash-window = "0.13.0"
 eren_window = { path = "../eren_window" }
+thiserror = "2.0.12"
 winit = "0.30.11"

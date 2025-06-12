@@ -1,7 +1,20 @@
 use std::sync::Arc;
+use thiserror::Error;
 
-use eren_window::{error::handle_fatal_error, window::WindowSize};
+use eren_window::window::WindowSize;
 use winit::window::Window;
+
+#[derive(Debug, Error)]
+pub enum GraphicsContextError {
+    #[error("Failed to create surface: {0}")]
+    CreateSurface(#[from] wgpu::CreateSurfaceError),
+
+    #[error("Failed to request adapter: {0}")]
+    RequestAdapter(#[from] wgpu::RequestAdapterError),
+
+    #[error("Failed to request device: {0}")]
+    RequestDevice(#[from] wgpu::RequestDeviceError),
+}
 
 #[derive(Debug)]
 pub struct FrameContext<'a> {
@@ -38,34 +51,24 @@ where
         }
     }
 
-    pub async fn init(&mut self, window: Arc<Window>) {
-        let surface = match self.instance.create_surface(window.clone()) {
-            Ok(s) => s,
-            Err(e) => handle_fatal_error(e, "Failed to create surface"),
-        };
+    pub async fn init(&mut self, window: Arc<Window>) -> Result<(), GraphicsContextError> {
+        let surface = self.instance.create_surface(window.clone())?;
 
-        let adapter = match self
+        let adapter = self
             .instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => handle_fatal_error(e, "Failed to request adapter"),
-        };
+            .await?;
 
         let limits = adapter.limits();
 
         let mut request_device_descriptor = wgpu::DeviceDescriptor::default();
         request_device_descriptor.required_limits = limits;
 
-        let (device, queue) = match adapter.request_device(&request_device_descriptor).await {
-            Ok((d, q)) => (d, q),
-            Err(e) => handle_fatal_error(e, "Failed to request device"),
-        };
+        let (device, queue) = adapter.request_device(&request_device_descriptor).await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -95,6 +98,8 @@ where
         self.queue = Some(queue);
         self.surface = Some(surface);
         self.surface_config = Some(surface_config);
+
+        Ok(())
     }
 
     pub fn resize(&mut self, window_size: WindowSize) {

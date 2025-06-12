@@ -3,8 +3,26 @@
 use std::ffi::CStr;
 
 use ash::{khr, vk};
+use thiserror::Error;
 
 use crate::vulkan::{instance::VulkanInstanceManager, surface::SurfaceManager};
+
+#[derive(Debug, Error)]
+pub enum PhysicalDeviceManagerError {
+    #[error("Failed to enumerate physical devices: {0}")]
+    EnumeratePhysicalDevicesFailed(String),
+
+    #[error("Failed to find a suitable GPU")]
+    FindSuitableGpuFailed,
+}
+
+#[derive(Debug, Error)]
+pub enum SwapChainManagerError {
+    #[error("Failed to enumerate swapchain support: {0}")]
+    EnumerateSwapchainSupportFailed(String),
+
+    //TODO
+}
 
 struct QueueFamilyIndices {
     graphics_queue_family_index: Option<u32>,
@@ -13,8 +31,7 @@ struct QueueFamilyIndices {
 
 impl QueueFamilyIndices {
     fn found(&self) -> bool {
-        self.graphics_queue_family_index.is_some()
-            && self.presentation_queue_family_index.is_some()
+        self.graphics_queue_family_index.is_some() && self.presentation_queue_family_index.is_some()
     }
 }
 
@@ -27,12 +44,17 @@ struct SwapChainSupportDetails {
 pub struct PhysicalDeviceManager {}
 
 impl PhysicalDeviceManager {
-    pub fn new(instance_manager: &VulkanInstanceManager, surface_manager: &SurfaceManager) -> Self {
+    pub fn new(
+        instance_manager: &VulkanInstanceManager,
+        surface_manager: &SurfaceManager,
+    ) -> Result<Self, PhysicalDeviceManagerError> {
         let physical_devices = unsafe {
             instance_manager
                 .instance
                 .enumerate_physical_devices()
-                .expect("Failed to enumerate physical devices")
+                .map_err(|e| {
+                    PhysicalDeviceManagerError::EnumeratePhysicalDevicesFailed(e.to_string())
+                })?
         };
 
         let (physical_device, queue_family_indices) = physical_devices
@@ -78,9 +100,9 @@ impl PhysicalDeviceManager {
                     None
                 }
             })
-            .expect("Failed to find a suitable GPU");
+            .ok_or(PhysicalDeviceManagerError::FindSuitableGpuFailed)?;
 
-        Self {}
+        Ok(Self {})
     }
 
     fn find_queue_families(
@@ -153,6 +175,7 @@ impl PhysicalDeviceManager {
         device: vk::PhysicalDevice,
     ) -> SwapChainSupportDetails {
         unsafe {
+            //TODO: Error handling
             let capabilities = surface_loader
                 .get_physical_device_surface_capabilities(device, surface)
                 .expect("Failed to query surface capabilities");
