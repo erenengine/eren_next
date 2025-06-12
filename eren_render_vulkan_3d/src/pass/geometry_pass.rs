@@ -113,7 +113,8 @@ impl<'a> GeometryPass<'a> {
                 &subpass_begin_info,
             );
 
-            //TODO: draw here
+            //TODO:
+            println!("Recording geometry pass");
 
             self.logical_device
                 .cmd_end_render_pass2(command_buffer, &vk::SubpassEndInfo::default());

@@ -8,6 +8,7 @@ use crate::vulkan::{
     logical_device::{LogicalDeviceManager, LogicalDeviceManagerError},
     physical_device::{PhysicalDeviceManager, PhysicalDeviceManagerError},
     surface::{SurfaceManager, SurfaceManagerError},
+    swapchain::{SwapchainManager, SwapchainManagerError},
 };
 
 #[derive(Debug, Error)]
@@ -26,12 +27,15 @@ pub enum GraphicsContextError {
 
     #[error("Failed to create logical device: {0}")]
     CreateLogicalDeviceFailed(#[from] LogicalDeviceManagerError),
+
+    #[error("Failed to create swapchain: {0}")]
+    CreateSwapchainFailed(#[from] SwapchainManagerError),
 }
 
 #[derive(Debug)]
 pub struct FrameContext {
     command_buffer: vk::CommandBuffer,
-    image_index: u32,
+    framebuffer: vk::Framebuffer,
 }
 
 pub struct GraphicsContext<F>
@@ -45,6 +49,7 @@ where
     surface_manager: Option<SurfaceManager>,
     physical_device_manager: Option<PhysicalDeviceManager>,
     logical_device_manager: Option<LogicalDeviceManager>,
+    swapchain_manager: Option<SwapchainManager>,
 }
 
 impl<F> GraphicsContext<F>
@@ -60,6 +65,7 @@ where
             surface_manager: None,
             physical_device_manager: None,
             logical_device_manager: None,
+            swapchain_manager: None,
         })
     }
 
@@ -76,23 +82,39 @@ where
             physical_device_manager.physical_device,
             &physical_device_manager.queue_family_indices,
         )?;
+        let swapchain_manager = SwapchainManager::new(
+            window,
+            &instance_manager.instance,
+            surface_manager.surface,
+            &physical_device_manager.queue_family_indices,
+            &physical_device_manager.swapchain_support_details,
+            &logical_device_manager.logical_device,
+        )?;
 
         self.instance_manager = Some(instance_manager);
         self.surface_manager = Some(surface_manager);
         self.physical_device_manager = Some(physical_device_manager);
         self.logical_device_manager = Some(logical_device_manager);
+        self.swapchain_manager = Some(swapchain_manager);
 
         Ok(())
     }
 
-    pub fn resize(&mut self, window_size: WindowSize) {}
+    pub fn resize(&mut self, window_size: WindowSize) {
+        //TODO:
+        println!("Resizing not implemented");
+    }
 
     pub fn destroy(&mut self) {
         self.instance_manager = None;
         self.surface_manager = None;
         self.physical_device_manager = None;
         self.logical_device_manager = None;
+        self.swapchain_manager = None;
     }
 
-    pub fn redraw(&mut self) {}
+    pub fn redraw(&mut self) {
+        //TODO:
+        //println!("Redraw not implemented");
+    }
 }

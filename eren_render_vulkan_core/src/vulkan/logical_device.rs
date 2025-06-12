@@ -13,7 +13,9 @@ pub enum LogicalDeviceManagerError {
 }
 
 pub struct LogicalDeviceManager {
-    logical_device: ash::Device,
+    pub logical_device: ash::Device,
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
 }
 
 impl LogicalDeviceManager {
@@ -64,6 +66,21 @@ impl LogicalDeviceManager {
                 .map_err(|e| LogicalDeviceManagerError::CreateDeviceFailed(e.to_string()))?
         };
 
-        Ok(Self { logical_device })
+        let graphics_queue = unsafe { logical_device.get_device_queue(graphics_index, 0) };
+        let present_queue = unsafe { logical_device.get_device_queue(present_index, 0) };
+
+        Ok(Self {
+            logical_device,
+            graphics_queue,
+            present_queue,
+        })
+    }
+}
+
+impl Drop for LogicalDeviceManager {
+    fn drop(&mut self) {
+        unsafe {
+            self.logical_device.destroy_device(None);
+        }
     }
 }
