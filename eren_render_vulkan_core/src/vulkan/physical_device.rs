@@ -20,11 +20,10 @@ pub enum PhysicalDeviceManagerError {
 pub enum SwapChainManagerError {
     #[error("Failed to enumerate swapchain support: {0}")]
     EnumerateSwapchainSupportFailed(String),
-
     //TODO
 }
 
-struct QueueFamilyIndices {
+pub struct QueueFamilyIndices {
     graphics_queue_family_index: Option<u32>,
     presentation_queue_family_index: Option<u32>,
 }
@@ -41,7 +40,10 @@ struct SwapChainSupportDetails {
     present_modes: Vec<vk::PresentModeKHR>,
 }
 
-pub struct PhysicalDeviceManager {}
+pub struct PhysicalDeviceManager {
+    physical_device: vk::PhysicalDevice,
+    queue_family_indices: QueueFamilyIndices,
+}
 
 impl PhysicalDeviceManager {
     pub fn new(
@@ -102,7 +104,10 @@ impl PhysicalDeviceManager {
             })
             .ok_or(PhysicalDeviceManagerError::FindSuitableGpuFailed)?;
 
-        Ok(Self {})
+        Ok(Self {
+            physical_device,
+            queue_family_indices,
+        })
     }
 
     fn find_queue_families(

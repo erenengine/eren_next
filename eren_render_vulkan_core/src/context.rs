@@ -1,3 +1,4 @@
+use ash::vk;
 use eren_window::window::WindowSize;
 use thiserror::Error;
 use winit::window::Window;
@@ -24,7 +25,10 @@ pub enum GraphicsContextError {
 }
 
 #[derive(Debug)]
-pub struct FrameContext {}
+pub struct FrameContext {
+    command_buffer: vk::CommandBuffer,
+    image_index: u32,
+}
 
 pub struct GraphicsContext<F>
 where
