@@ -1,3 +1,5 @@
+use ash::vk;
+
 pub struct ShadowPass {
     pub framebuffer: vk::Framebuffer,
     pub render_pass: vk::RenderPass,

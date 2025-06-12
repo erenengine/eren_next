@@ -1,3 +1,5 @@
+use ash::vk;
+
 pub struct PostProcessPass {
     pub render_pass: vk::RenderPass,
     pub pipeline: vk::Pipeline,
