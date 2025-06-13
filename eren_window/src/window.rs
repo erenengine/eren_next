@@ -26,6 +26,7 @@ pub trait WindowEventHandler {
     fn on_window_lost(&mut self);
     fn on_window_resized(&mut self, size: WindowSize);
     fn redraw(&mut self);
+    fn on_window_close_requested(&mut self);
 }
 
 pub struct WindowLifecycleManager<E: WindowEventHandler> {
@@ -106,6 +107,7 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
                 }
             }
             WindowEvent::CloseRequested => {
+                self.event_handler.on_window_close_requested();
                 event_loop.exit();
             }
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {

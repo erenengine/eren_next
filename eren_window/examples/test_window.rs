@@ -25,6 +25,10 @@ impl WindowEventHandler for TestWindowEventHandler {
     fn redraw(&mut self) {
         //println!("Redraw");
     }
+
+    fn on_window_close_requested(&mut self) {
+        println!("Window close requested");
+    }
 }
 
 fn main() {

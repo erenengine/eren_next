@@ -48,8 +48,8 @@ impl WindowEventHandler for TestWindowEventHandler {
     fn on_window_lost(&mut self) {
         println!("Window lost");
 
-        self.graphics_context.destroy();
         self.renderer = None;
+        self.graphics_context.destroy();
     }
 
     fn on_window_resized(&mut self, size: WindowSize) {
@@ -69,6 +69,11 @@ impl WindowEventHandler for TestWindowEventHandler {
                 Err(e) => show_error_popup_and_panic(e, "Failed to redraw graphics context"),
             }
         }
+    }
+
+    fn on_window_close_requested(&mut self) {
+        self.renderer = None;
+        self.graphics_context.destroy();
     }
 }
 

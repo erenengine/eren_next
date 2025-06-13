@@ -249,9 +249,9 @@ impl<R: Renderer> GraphicsContext<R> {
                 &logical_device_manager.logical_device,
             )?;
 
-            for image in &swapchain_manager.swapchain_images {
+            for &image in &swapchain_manager.swapchain_images {
                 let create_info = vk::ImageViewCreateInfo::default()
-                    .image(*image)
+                    .image(image)
                     .view_type(vk::ImageViewType::TYPE_2D)
                     .format(swapchain_manager.preferred_surface_format)
                     .components(vk::ComponentMapping::default())
@@ -286,11 +286,52 @@ impl<R: Renderer> GraphicsContext<R> {
     }
 
     pub fn destroy(&mut self) {
-        self.instance_manager = None;
-        self.surface_manager = None;
-        self.physical_device_manager = None;
-        self.logical_device_manager = None;
+        unsafe {
+            if let Some(logical_device_manager) = &self.logical_device_manager {
+                logical_device_manager
+                    .logical_device
+                    .device_wait_idle()
+                    .expect("Failed to wait for device idle");
+
+                for &image_view in &self.swapchain_image_views {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_image_view(image_view, None);
+                }
+
+                for &semaphore in self.image_available_semaphores.iter() {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_semaphore(semaphore, None);
+                }
+
+                for &semaphore in self.render_finished_semaphores.iter() {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_semaphore(semaphore, None);
+                }
+
+                for &fence in self.frame_completion_fences.iter() {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_fence(fence, None);
+                }
+
+                // image_in_flight_fences contains copies of frame_completion_fences, no need to double destroy.
+
+                if let Some(command_pool) = self.command_pool {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_command_pool(command_pool, None);
+                }
+            }
+        }
+
         self.swapchain_manager = None;
+        self.logical_device_manager = None;
+        self.physical_device_manager = None;
+        self.surface_manager = None;
+        self.instance_manager = None;
     }
 
     fn recreate_swapchain(&mut self) -> Result<(), GraphicsContextError> {
@@ -299,15 +340,20 @@ impl<R: Renderer> GraphicsContext<R> {
                 logical_device_manager
                     .logical_device
                     .device_wait_idle()
-                    .map_err(|e| GraphicsContextError::DeviceWaitIdleFailed(e.to_string()))?
+                    .map_err(|e| GraphicsContextError::DeviceWaitIdleFailed(e.to_string()))?;
+
+                for &image_view in &self.swapchain_image_views {
+                    logical_device_manager
+                        .logical_device
+                        .destroy_image_view(image_view, None);
+                }
             };
+
+            self.swapchain_image_views.clear();
+            self.swapchain_manager = None;
+
+            self.create_swapchain()?;
         }
-
-        self.swapchain_image_views.clear();
-        self.swapchain_manager = None;
-
-        self.create_swapchain()?;
-
         Ok(())
     }
 
@@ -447,55 +493,6 @@ impl<R: Renderer> GraphicsContext<R> {
 
 impl<R: Renderer> Drop for GraphicsContext<R> {
     fn drop(&mut self) {
-        if let Some(logical_device_manager) = &self.logical_device_manager {
-            unsafe {
-                logical_device_manager
-                    .logical_device
-                    .device_wait_idle()
-                    .expect("Failed to wait for device idle")
-            };
-
-            for image_view in &self.swapchain_image_views {
-                unsafe {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_image_view(*image_view, None);
-                }
-            }
-
-            for &semaphore in self.image_available_semaphores.iter() {
-                unsafe {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_semaphore(semaphore, None)
-                };
-            }
-
-            for &semaphore in self.render_finished_semaphores.iter() {
-                unsafe {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_semaphore(semaphore, None)
-                };
-            }
-
-            for &fence in self.frame_completion_fences.iter() {
-                unsafe {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_fence(fence, None)
-                };
-            }
-
-            // image_in_flight_fences contains copies of frame_completion_fences, no need to double destroy.
-
-            if let Some(command_pool) = self.command_pool {
-                unsafe {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_command_pool(command_pool, None)
-                };
-            }
-        }
+        self.destroy();
     }
 }

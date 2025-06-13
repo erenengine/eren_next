@@ -44,6 +44,9 @@ pub struct TestPass {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     render_area: vk::Rect2D,
 
+    vertex_shader_module: vk::ShaderModule,
+    fragment_shader_module: vk::ShaderModule,
+
     pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
 }
@@ -213,6 +216,9 @@ impl TestPass {
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
 
+            vertex_shader_module,
+            fragment_shader_module,
+
             pipeline,
             pipeline_layout,
         })
@@ -254,11 +260,20 @@ impl Drop for TestPass {
     fn drop(&mut self) {
         unsafe {
             self.logical_device
+                .device_wait_idle()
+                .expect("Failed to wait for device idle");
+
+            self.logical_device
                 .destroy_render_pass(self.render_pass, None);
 
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.logical_device.destroy_framebuffer(framebuffer, None);
             }
+
+            self.logical_device
+                .destroy_shader_module(self.vertex_shader_module, None);
+            self.logical_device
+                .destroy_shader_module(self.fragment_shader_module, None);
 
             self.logical_device.destroy_pipeline(self.pipeline, None);
             self.logical_device
