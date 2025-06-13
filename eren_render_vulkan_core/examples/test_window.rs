@@ -46,7 +46,10 @@ where
     fn redraw(&mut self) {
         //println!("Redraw");
 
-        self.graphics_context.redraw();
+        match self.graphics_context.redraw() {
+            Ok(_) => {}
+            Err(e) => show_error_popup_and_panic(e, "Failed to redraw graphics context"),
+        }
     }
 }
 

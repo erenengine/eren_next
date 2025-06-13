@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::vk;
 use thiserror::Error;
 
@@ -13,7 +15,7 @@ pub enum LogicalDeviceManagerError {
 }
 
 pub struct LogicalDeviceManager {
-    pub logical_device: ash::Device,
+    pub logical_device: Arc<ash::Device>,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
 }
@@ -70,7 +72,7 @@ impl LogicalDeviceManager {
         let present_queue = unsafe { logical_device.get_device_queue(present_index, 0) };
 
         Ok(Self {
-            logical_device,
+            logical_device: Arc::new(logical_device),
             graphics_queue,
             present_queue,
         })

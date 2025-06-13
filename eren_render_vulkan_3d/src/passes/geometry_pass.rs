@@ -29,15 +29,20 @@ pub struct GeometryPass<'a> {
 }
 
 impl<'a> GeometryPass<'a> {
-    pub fn new(logical_device: &'a ash::Device) -> Result<Self, GeometryPassError> {
+    pub fn new(
+        logical_device: Arc<ash::Device>,
+        swapchain_image_views: &Vec<vk::ImageView>,
+        surface_format: vk::Format,
+        image_extent: vk::Extent2D,
+    ) -> Result<Self, GeometryPassError> {
         let color_attachment = vk::AttachmentDescription2::default()
-            .format(vk::Format::B8G8R8A8_UNORM)
+            .format(surface_format)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
             .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
             .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
             .samples(vk::SampleCountFlags::TYPE_1);
 
         let depth_attachment = vk::AttachmentDescription2::default()

@@ -63,6 +63,7 @@ pub struct SwapchainManager {
     pub swapchain_images: Vec<vk::Image>,
     pub amount_of_images: usize,
     pub preferred_surface_format: vk::Format,
+    pub image_extent: vk::Extent2D,
 }
 
 impl SwapchainManager {
@@ -137,6 +138,7 @@ impl SwapchainManager {
             swapchain_images,
             amount_of_images,
             preferred_surface_format: surface_format.format,
+            image_extent,
         })
     }
 }

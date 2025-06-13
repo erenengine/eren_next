@@ -1,4 +1,4 @@
-use std::sync::Arc;
+/*use std::sync::Arc;
 
 use eren_render_vulkan_core::context::{FrameContext, GraphicsContext};
 use eren_window::{
@@ -69,4 +69,8 @@ fn main() {
         },
     )
     .start_event_loop();
+}*/
+
+fn main() {
+    println!("Hello, world!");
 }

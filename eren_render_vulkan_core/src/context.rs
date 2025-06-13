@@ -5,6 +5,7 @@ use winit::window::Window;
 
 use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
+    renderer::{FrameContext, Renderer},
     vulkan::{
         instance::{VulkanInstanceManager, VulkanInstanceManagerError},
         logical_device::{LogicalDeviceManager, LogicalDeviceManagerError},
@@ -77,26 +78,16 @@ pub enum RedrawError {
     QueuePresentFailed(String),
 }
 
-#[derive(Debug)]
-pub struct FrameContext {
-    command_buffer: vk::CommandBuffer,
-    swapchain_image_view: vk::ImageView,
-}
-
-pub struct GraphicsContext<F>
-where
-    F: Fn(&FrameContext),
-{
-    draw_frame: F,
+pub struct GraphicsContext<R: Renderer> {
     entry: ash::Entry,
 
     instance_manager: Option<VulkanInstanceManager>,
     surface_manager: Option<SurfaceManager>,
     physical_device_manager: Option<PhysicalDeviceManager>,
-    logical_device_manager: Option<LogicalDeviceManager>,
-    swapchain_manager: Option<SwapchainManager>,
+    pub logical_device_manager: Option<LogicalDeviceManager>,
+    pub swapchain_manager: Option<SwapchainManager>,
 
-    swapchain_image_views: Vec<vk::ImageView>,
+    pub swapchain_image_views: Vec<vk::ImageView>,
     command_pool: Option<vk::CommandPool>,
     command_buffers: Vec<vk::CommandBuffer>,
 
@@ -106,16 +97,14 @@ where
     image_in_flight_fences: Vec<vk::Fence>,
 
     current_frame: usize,
+
+    phantom: std::marker::PhantomData<R>,
 }
 
-impl<F> GraphicsContext<F>
-where
-    F: Fn(&FrameContext),
-{
-    pub fn new(draw_frame: F) -> Result<Self, GraphicsContextError> {
+impl<R: Renderer> GraphicsContext<R> {
+    pub fn new() -> Result<Self, GraphicsContextError> {
         let entry = unsafe { ash::Entry::load()? };
         Ok(Self {
-            draw_frame,
             entry,
 
             instance_manager: None,
@@ -134,6 +123,8 @@ where
             image_in_flight_fences: Vec::new(),
 
             current_frame: 0,
+
+            phantom: std::marker::PhantomData,
         })
     }
 
@@ -224,13 +215,6 @@ where
                     .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
             });
 
-            self.render_finished_semaphores.push(unsafe {
-                logical_device_manager
-                    .logical_device
-                    .create_semaphore(&semaphore_create_info, None)
-                    .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
-            });
-
             self.frame_completion_fences.push(unsafe {
                 logical_device_manager
                     .logical_device
@@ -242,9 +226,16 @@ where
             });
         }
 
-        // image_usage_fences needs to be sized to swapchain image count, not MAX_FRAMES_IN_FLIGHT
-        // and initialized to vk::Fence::null()
-        self.image_in_flight_fences = vec![vk::Fence::null(); swapchain_manager.amount_of_images];
+        for _ in 0..swapchain_manager.amount_of_images {
+            self.render_finished_semaphores.push(unsafe {
+                logical_device_manager
+                    .logical_device
+                    .create_semaphore(&semaphore_create_info, None)
+                    .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
+            });
+
+            self.image_in_flight_fences.push(vk::Fence::null());
+        }
 
         self.instance_manager = Some(instance_manager);
         self.surface_manager = Some(surface_manager);
@@ -270,10 +261,21 @@ where
         self.swapchain_manager = None;
     }
 
-    pub fn redraw(&mut self) -> Result<(), RedrawError> {
+    pub fn redraw(&mut self, renderer: &R) -> Result<(), RedrawError> {
         if let (Some(logical_device_manager), Some(swapchain_manager)) =
             (&self.logical_device_manager, &self.swapchain_manager)
         {
+            unsafe {
+                logical_device_manager
+                    .logical_device
+                    .wait_for_fences(
+                        &[self.frame_completion_fences[self.current_frame]],
+                        true,
+                        std::u64::MAX,
+                    )
+                    .map_err(|e| RedrawError::WaitForFencesFailed(e.to_string()))?
+            };
+
             let (image_index, _) = unsafe {
                 swapchain_manager
                     .swapchain_loader
@@ -284,17 +286,6 @@ where
                         vk::Fence::null(), // Not using a fence here
                     )
                     .map_err(|e| RedrawError::AcquireNextImageFailed(e.to_string()))?
-            };
-
-            unsafe {
-                logical_device_manager
-                    .logical_device
-                    .wait_for_fences(
-                        &[self.frame_completion_fences[self.current_frame]],
-                        true,
-                        std::u64::MAX,
-                    )
-                    .map_err(|e| RedrawError::WaitForFencesFailed(e.to_string()))?
             };
 
             // Check if a previous frame is using this image (i.e. there is its fence to wait on)
@@ -331,9 +322,9 @@ where
                     .map_err(|e| RedrawError::BeginCommandBufferFailed(e.to_string()))?;
             }
 
-            (self.draw_frame)(&FrameContext {
+            renderer.render(&FrameContext {
                 command_buffer,
-                swapchain_image_view: self.swapchain_image_views[image_index as usize],
+                image_index: image_index as usize,
             });
 
             unsafe {
@@ -344,7 +335,7 @@ where
             }
 
             let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
-            let signal_semaphores = [self.render_finished_semaphores[self.current_frame]];
+            let signal_semaphores = [self.render_finished_semaphores[image_index as usize]];
             let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
 
             let submit_infos = [vk::SubmitInfo::default()
@@ -358,9 +349,7 @@ where
                     .logical_device
                     .reset_fences(&[self.frame_completion_fences[self.current_frame]])
                     .map_err(|e| RedrawError::ResetFencesFailed(e.to_string()))?;
-            }
 
-            unsafe {
                 logical_device_manager
                     .logical_device
                     .queue_submit(
@@ -392,10 +381,7 @@ where
     }
 }
 
-impl<F> Drop for GraphicsContext<F>
-where
-    F: Fn(&FrameContext),
-{
+impl<R: Renderer> Drop for GraphicsContext<R> {
     fn drop(&mut self) {
         if let Some(logical_device_manager) = &self.logical_device_manager {
             for image_view in &self.swapchain_image_views {

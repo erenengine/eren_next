@@ -1,7 +1,4 @@
-use ash::{
-    khr::{surface, swapchain},
-    vk,
-};
+use ash::{khr::surface, vk};
 use thiserror::Error;
 
 use crate::vulkan::{
