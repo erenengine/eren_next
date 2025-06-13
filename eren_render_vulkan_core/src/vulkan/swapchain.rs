@@ -52,11 +52,17 @@ pub fn get_swapchain_support_details(
 pub enum SwapchainManagerError {
     #[error("Failed to create swapchain: {0}")]
     CreateSwapchainFailed(String),
+
+    #[error("Failed to get swapchain images: {0}")]
+    GetSwapchainImagesFailed(String),
 }
 
 pub struct SwapchainManager {
-    swapchain_loader: swapchain::Device,
-    swapchain: vk::SwapchainKHR,
+    pub swapchain_loader: swapchain::Device,
+    pub swapchain: vk::SwapchainKHR,
+    pub swapchain_images: Vec<vk::Image>,
+    pub amount_of_images: usize,
+    pub preferred_surface_format: vk::Format,
 }
 
 impl SwapchainManager {
@@ -117,9 +123,20 @@ impl SwapchainManager {
                 .map_err(|e| SwapchainManagerError::CreateSwapchainFailed(e.to_string()))
         }?;
 
+        let swapchain_images = unsafe {
+            swapchain_loader
+                .get_swapchain_images(swapchain)
+                .map_err(|e| SwapchainManagerError::GetSwapchainImagesFailed(e.to_string()))?
+        };
+
+        let amount_of_images = swapchain_images.len();
+
         Ok(Self {
             swapchain_loader,
             swapchain,
+            swapchain_images,
+            amount_of_images,
+            preferred_surface_format: surface_format.format,
         })
     }
 }
