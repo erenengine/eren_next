@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::vk;
 use thiserror::Error;
 use winit::{raw_window_handle::HasDisplayHandle, window::Window};
@@ -21,7 +23,10 @@ pub struct VulkanInstanceManager {
 }
 
 impl VulkanInstanceManager {
-    pub fn new(entry: &ash::Entry, window: &Window) -> Result<Self, VulkanInstanceManagerError> {
+    pub fn new(
+        entry: &ash::Entry,
+        window: Arc<Window>,
+    ) -> Result<Self, VulkanInstanceManagerError> {
         let app_name = std::ffi::CString::new(window.title()).unwrap();
         let engine_name = std::ffi::CString::new("ErenEngine").unwrap();
 

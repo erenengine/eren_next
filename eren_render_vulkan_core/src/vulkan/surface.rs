@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use ash::{khr, vk};
 use thiserror::Error;
 use winit::{
@@ -20,7 +22,7 @@ impl SurfaceManager {
     pub fn new(
         entry: &ash::Entry,
         instance: &ash::Instance,
-        window: &Window,
+        window: Arc<Window>,
     ) -> Result<Self, SurfaceManagerError> {
         let surface_loader = khr::surface::Instance::new(entry, instance);
 

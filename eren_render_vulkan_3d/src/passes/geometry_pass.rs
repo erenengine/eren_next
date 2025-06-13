@@ -20,7 +20,7 @@ const CLEAR_VALUES: [vk::ClearValue; 2] = [
 #[derive(Debug, Error)]
 pub enum GeometryPassError {
     #[error("Failed to create render pass: {0}")]
-    RenderPassCreationFailed(vk::Result),
+    RenderPassCreationFailed(String),
 }
 
 pub struct GeometryPass<'a> {

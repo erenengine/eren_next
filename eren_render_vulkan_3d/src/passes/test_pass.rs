@@ -4,7 +4,7 @@ use ash::vk;
 use eren_render_vulkan_core::renderer::FrameContext;
 use thiserror::Error;
 
-use crate::constants::CLEAR_COLOR;
+use crate::{constants::CLEAR_COLOR, shader::create_shader_module};
 
 const CLEAR_VALUES: [vk::ClearValue; 2] = [
     vk::ClearValue {
@@ -20,13 +20,22 @@ const CLEAR_VALUES: [vk::ClearValue; 2] = [
     },
 ];
 
+const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.vert.spv");
+const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.frag.spv");
+
 #[derive(Debug, Error)]
 pub enum TestPassError {
     #[error("Failed to create render pass: {0}")]
-    RenderPassCreationFailed(vk::Result),
+    RenderPassCreationFailed(String),
 
     #[error("Failed to create framebuffer: {0}")]
-    FramebufferCreationFailed(vk::Result),
+    FramebufferCreationFailed(String),
+
+    #[error("Failed to create shader module: {0}")]
+    ShaderModuleCreationFailed(String),
+
+    #[error("Failed to create pipeline layout: {0}")]
+    PipelineLayoutCreationFailed(String),
 }
 
 pub struct TestPass {
@@ -34,6 +43,9 @@ pub struct TestPass {
     render_pass: vk::RenderPass,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     render_area: vk::Rect2D,
+
+    pipeline: vk::Pipeline,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 impl TestPass {
@@ -79,7 +91,7 @@ impl TestPass {
         let render_pass = unsafe {
             logical_device
                 .create_render_pass2(&create_render_pass_info, None)
-                .map_err(|err| TestPassError::RenderPassCreationFailed(err))?
+                .map_err(|e| TestPassError::RenderPassCreationFailed(e.to_string()))?
         };
 
         let mut swapchain_framebuffers = Vec::new();
@@ -94,10 +106,104 @@ impl TestPass {
             let framebuffer = unsafe {
                 logical_device
                     .create_framebuffer(&framebuffer_info, None)
-                    .map_err(|err| TestPassError::FramebufferCreationFailed(err))?
+                    .map_err(|e| TestPassError::FramebufferCreationFailed(e.to_string()))?
             };
             swapchain_framebuffers.push(framebuffer);
         }
+
+        let vertex_shader_module = create_shader_module(&logical_device, VERT_SHADER_BYTES)
+            .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
+
+        let fragment_shader_module = create_shader_module(&logical_device, FRAG_SHADER_BYTES)
+            .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
+
+        let main_function_name = std::ffi::CString::new("main").unwrap();
+
+        let shader_stages = [
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::VERTEX)
+                .module(vertex_shader_module)
+                .name(&main_function_name),
+            vk::PipelineShaderStageCreateInfo::default()
+                .stage(vk::ShaderStageFlags::FRAGMENT)
+                .module(fragment_shader_module)
+                .name(&main_function_name),
+        ];
+
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
+
+        let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::default()
+            .topology(vk::PrimitiveTopology::POINT_LIST);
+
+        let viewports = [vk::Viewport {
+            x: 0.,
+            y: 0.,
+            width: image_extent.width as f32,
+            height: image_extent.height as f32,
+            min_depth: 0.,
+            max_depth: 1.,
+        }];
+
+        let scissors = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: image_extent,
+        }];
+
+        let viewport_info = vk::PipelineViewportStateCreateInfo::default()
+            .viewports(&viewports)
+            .scissors(&scissors);
+
+        let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::default()
+            .line_width(1.0)
+            .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
+            .cull_mode(vk::CullModeFlags::NONE)
+            .polygon_mode(vk::PolygonMode::FILL);
+
+        let multisampler_info = vk::PipelineMultisampleStateCreateInfo::default()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
+        let color_blend_attachments = [vk::PipelineColorBlendAttachmentState::default()
+            .blend_enable(true)
+            .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .color_blend_op(vk::BlendOp::ADD)
+            .src_alpha_blend_factor(vk::BlendFactor::SRC_ALPHA)
+            .dst_alpha_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
+            .alpha_blend_op(vk::BlendOp::ADD)
+            .color_write_mask(
+                vk::ColorComponentFlags::R
+                    | vk::ColorComponentFlags::G
+                    | vk::ColorComponentFlags::B
+                    | vk::ColorComponentFlags::A,
+            )];
+
+        let color_blend_info =
+            vk::PipelineColorBlendStateCreateInfo::default().attachments(&color_blend_attachments);
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
+        let pipeline_layout = unsafe {
+            logical_device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .map_err(|e| TestPassError::PipelineLayoutCreationFailed(e.to_string()))?
+        };
+
+        let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+            .stages(&shader_stages)
+            .vertex_input_state(&vertex_input_info)
+            .input_assembly_state(&input_assembly_info)
+            .viewport_state(&viewport_info)
+            .rasterization_state(&rasterizer_info)
+            .multisample_state(&multisampler_info)
+            .color_blend_state(&color_blend_info)
+            .layout(pipeline_layout)
+            .render_pass(render_pass)
+            .subpass(0);
+
+        let pipeline = unsafe {
+            logical_device
+                .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+                .expect("A problem with the pipeline creation")
+        }[0];
 
         Ok(Self {
             logical_device,
@@ -106,6 +212,9 @@ impl TestPass {
             render_area: vk::Rect2D::default()
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
+
+            pipeline,
+            pipeline_layout,
         })
     }
 
@@ -126,14 +235,14 @@ impl TestPass {
                 &subpass_begin_info,
             );
 
-            /*self.logical_device.cmd_bind_pipeline(
+            self.logical_device.cmd_bind_pipeline(
                 frame_context.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                pipeline.pipeline,
+                self.pipeline,
             );
 
             self.logical_device
-                .cmd_draw(frame_context.command_buffer, 1, 1, 0, 0);*/
+                .cmd_draw(frame_context.command_buffer, 1, 1, 0, 0);
 
             self.logical_device
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());
@@ -150,6 +259,10 @@ impl Drop for TestPass {
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.logical_device.destroy_framebuffer(framebuffer, None);
             }
+
+            self.logical_device.destroy_pipeline(self.pipeline, None);
+            self.logical_device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
 }

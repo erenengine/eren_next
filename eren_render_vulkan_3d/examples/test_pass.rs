@@ -13,19 +13,8 @@ struct TestWindowEventHandler {
     renderer: Option<Renderer3D>,
 }
 
-impl WindowEventHandler for TestWindowEventHandler {
-    fn on_window_ready(&mut self, window: Arc<Window>) {
-        println!(
-            "Window ready: {}x{}",
-            window.inner_size().width,
-            window.inner_size().height
-        );
-
-        match self.graphics_context.init(&window) {
-            Ok(_) => {}
-            Err(e) => show_error_popup_and_panic(e, "Failed to initialize graphics context"),
-        };
-
+impl TestWindowEventHandler {
+    fn recreate_renderer(&mut self) {
         let logical_device_manager = self
             .graphics_context
             .logical_device_manager
@@ -46,6 +35,23 @@ impl WindowEventHandler for TestWindowEventHandler {
 
         self.renderer = Some(renderer);
     }
+}
+
+impl WindowEventHandler for TestWindowEventHandler {
+    fn on_window_ready(&mut self, window: Arc<Window>) {
+        println!(
+            "Window ready: {}x{}",
+            window.inner_size().width,
+            window.inner_size().height
+        );
+
+        match self.graphics_context.init(window) {
+            Ok(_) => {}
+            Err(e) => show_error_popup_and_panic(e, "Failed to initialize graphics context"),
+        };
+
+        self.recreate_renderer();
+    }
 
     fn on_window_lost(&mut self) {
         println!("Window lost");
@@ -63,7 +69,11 @@ impl WindowEventHandler for TestWindowEventHandler {
     fn redraw(&mut self) {
         if let Some(renderer) = &self.renderer {
             match self.graphics_context.redraw(renderer) {
-                Ok(_) => {}
+                Ok(renderer_needs_recreation) => {
+                    if renderer_needs_recreation {
+                        self.recreate_renderer();
+                    }
+                }
                 Err(e) => show_error_popup_and_panic(e, "Failed to redraw graphics context"),
             }
         }

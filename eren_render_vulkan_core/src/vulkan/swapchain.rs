@@ -5,51 +5,10 @@ use winit::window::Window;
 use crate::vulkan::queue::QueueFamilyIndices;
 
 #[derive(Debug, Error)]
-pub enum SwapchainSupportError {
-    #[error("Failed to enumerate swapchain support: {0}")]
-    EnumerateSwapchainSupportFailed(String),
-
-    #[error("Failed to enumerate swapchain formats: {0}")]
-    EnumerateSwapchainFormatsFailed(String),
-
-    #[error("Failed to enumerate swapchain present modes: {0}")]
-    EnumerateSwapchainPresentModesFailed(String),
-}
-
-pub struct SwapchainSupportDetails {
-    pub capabilities: vk::SurfaceCapabilitiesKHR,
-    pub formats: Vec<vk::SurfaceFormatKHR>,
-    pub present_modes: Vec<vk::PresentModeKHR>,
-}
-
-pub fn get_swapchain_support_details(
-    surface_loader: &ash::khr::surface::Instance,
-    surface: vk::SurfaceKHR,
-    device: vk::PhysicalDevice,
-) -> Result<SwapchainSupportDetails, SwapchainSupportError> {
-    Ok(unsafe {
-        SwapchainSupportDetails {
-            capabilities: surface_loader
-                .get_physical_device_surface_capabilities(device, surface)
-                .map_err(|e| {
-                    SwapchainSupportError::EnumerateSwapchainSupportFailed(e.to_string())
-                })?,
-            formats: surface_loader
-                .get_physical_device_surface_formats(device, surface)
-                .map_err(|e| {
-                    SwapchainSupportError::EnumerateSwapchainFormatsFailed(e.to_string())
-                })?,
-            present_modes: surface_loader
-                .get_physical_device_surface_present_modes(device, surface)
-                .map_err(|e| {
-                    SwapchainSupportError::EnumerateSwapchainPresentModesFailed(e.to_string())
-                })?,
-        }
-    })
-}
-
-#[derive(Debug, Error)]
 pub enum SwapchainManagerError {
+    #[error("Swapchain support query failed: {0}")]
+    SwapchainSupportQueryFailed(#[from] SwapchainSupportError),
+
     #[error("Failed to create swapchain: {0}")]
     CreateSwapchainFailed(String),
 
@@ -70,11 +29,15 @@ impl SwapchainManager {
     pub fn new(
         window: &Window,
         instance: &ash::Instance,
+        surface_loader: &ash::khr::surface::Instance,
         surface: vk::SurfaceKHR,
+        physical_device: vk::PhysicalDevice,
         queue_family_indices: &QueueFamilyIndices,
-        support_details: &SwapchainSupportDetails,
         logical_device: &ash::Device,
     ) -> Result<Self, SwapchainManagerError> {
+        let support_details =
+            get_swapchain_support_details(surface_loader, surface, physical_device)?;
+
         let mut min_image_count = support_details.capabilities.min_image_count + 1;
         if support_details.capabilities.max_image_count > 0
             && min_image_count > support_details.capabilities.max_image_count
@@ -192,4 +155,48 @@ fn select_preferred_present_mode(
         // FIFO is guaranteed to be available on all platforms
         vk::PresentModeKHR::FIFO
     }
+}
+
+#[derive(Debug, Error)]
+pub enum SwapchainSupportError {
+    #[error("Failed to enumerate swapchain support: {0}")]
+    EnumerateSwapchainSupportFailed(String),
+
+    #[error("Failed to enumerate swapchain formats: {0}")]
+    EnumerateSwapchainFormatsFailed(String),
+
+    #[error("Failed to enumerate swapchain present modes: {0}")]
+    EnumerateSwapchainPresentModesFailed(String),
+}
+
+pub struct SwapchainSupportDetails {
+    pub capabilities: vk::SurfaceCapabilitiesKHR,
+    pub formats: Vec<vk::SurfaceFormatKHR>,
+    pub present_modes: Vec<vk::PresentModeKHR>,
+}
+
+pub fn get_swapchain_support_details(
+    surface_loader: &ash::khr::surface::Instance,
+    surface: vk::SurfaceKHR,
+    physical_device: vk::PhysicalDevice,
+) -> Result<SwapchainSupportDetails, SwapchainSupportError> {
+    Ok(unsafe {
+        SwapchainSupportDetails {
+            capabilities: surface_loader
+                .get_physical_device_surface_capabilities(physical_device, surface)
+                .map_err(|e| {
+                    SwapchainSupportError::EnumerateSwapchainSupportFailed(e.to_string())
+                })?,
+            formats: surface_loader
+                .get_physical_device_surface_formats(physical_device, surface)
+                .map_err(|e| {
+                    SwapchainSupportError::EnumerateSwapchainFormatsFailed(e.to_string())
+                })?,
+            present_modes: surface_loader
+                .get_physical_device_surface_present_modes(physical_device, surface)
+                .map_err(|e| {
+                    SwapchainSupportError::EnumerateSwapchainPresentModesFailed(e.to_string())
+                })?,
+        }
+    })
 }
