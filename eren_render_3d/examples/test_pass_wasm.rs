@@ -1,8 +1,10 @@
+use futures::lock::Mutex;
+
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::window;
 
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use eren_render_3d::renderer::Renderer3D;
 use eren_render_core::context::GraphicsContext;
@@ -19,80 +21,122 @@ pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str)
 }
 
 struct TestWindowEventHandler {
-    graphics_context: Rc<RefCell<GraphicsContext<'static, Renderer3D>>>,
-    renderer: Rc<RefCell<Option<Renderer3D>>>,
+    initialized: bool,
+    window: Option<Arc<Window>>,
+    graphics_context: Arc<Mutex<GraphicsContext<'static, Renderer3D>>>,
+    renderer: Arc<Mutex<Option<Renderer3D>>>,
+}
+
+impl TestWindowEventHandler {
+    fn initialize(&mut self) {
+        self.initialized = true;
+
+        let ctx = self.graphics_context.clone();
+        let renderer_handle: Arc<Mutex<Option<Renderer3D>>> = self.renderer.clone();
+        let win = self.window.clone().unwrap();
+
+        spawn_local(async move {
+            let mut ctx_lock = ctx.lock().await;
+            if let Err(e) = ctx_lock.init(win.clone()).await {
+                show_error_popup_and_panic(e, "Failed to initialize graphics context");
+            }
+
+            web_sys::console::log_1(&"Create renderer".into());
+
+            let inner_size = win.inner_size();
+            let window_size = WindowSize {
+                width: inner_size.width,
+                height: inner_size.height,
+                scale_factor: win.scale_factor(),
+            };
+
+            let device = ctx_lock.device.clone().unwrap();
+            let surface_format = ctx_lock.surface_format.clone().unwrap();
+
+            let mut renderer_handle_lock = renderer_handle.lock().await;
+            *renderer_handle_lock = Some(Renderer3D::new(&device, surface_format, window_size));
+        });
+    }
 }
 
 impl WindowEventHandler for TestWindowEventHandler {
     fn on_window_ready(&mut self, window: Arc<Window>) {
-        let ctx = self.graphics_context.clone();
-        let renderer_handle = self.renderer.clone();
-        let win = window.clone();
+        web_sys::console::log_1(
+            &format!(
+                "Window ready: {}x{}",
+                window.inner_size().width,
+                window.inner_size().height
+            )
+            .into(),
+        );
 
-        spawn_local(async move {
-            let init_result = ctx.borrow_mut().init(win.clone()).await;
+        self.window = Some(window.clone());
 
-            match init_result {
-                Ok(_) => {
-                    let inner_size = win.inner_size();
-                    let window_size = WindowSize {
-                        width: inner_size.width,
-                        height: inner_size.height,
-                        scale_factor: win.scale_factor(),
-                    };
-
-                    let (device_opt, format_opt) = {
-                        let ctx_ref = ctx.borrow();
-                        (ctx_ref.device.clone(), ctx_ref.surface_format)
-                    };
-
-                    match (device_opt, format_opt) {
-                        (Some(device), Some(surface_format)) => {
-                            let renderer = Renderer3D::new(&device, surface_format, window_size);
-                            *renderer_handle.borrow_mut() = Some(renderer);
-                        }
-                        _ => show_error_popup_and_panic(
-                            "Missing device or surface format after init",
-                            "Renderer creation error",
-                        ),
-                    }
-                }
-                Err(e) => show_error_popup_and_panic(e, "Failed to initialise graphics context"),
-            }
-        });
+        if window.inner_size().width > 0 && window.inner_size().height > 0 {
+            self.initialize();
+        }
     }
 
     fn on_window_lost(&mut self) {
         web_sys::console::log_1(&"Window lost".into());
 
-        self.renderer.borrow_mut().take();
-        self.graphics_context.borrow_mut().destroy();
+        let renderer = self.renderer.clone();
+        let ctx = self.graphics_context.clone();
+
+        spawn_local(async move {
+            let mut renderer_lock = renderer.lock().await;
+            let mut ctx_lock = ctx.lock().await;
+
+            renderer_lock.take();
+            ctx_lock.destroy();
+        });
     }
 
     fn on_window_resized(&mut self, size: WindowSize) {
         web_sys::console::log_1(&format!("Window resized: {:?}", size).into());
 
-        self.graphics_context.borrow_mut().resize(size);
+        if self.initialized {
+            let ctx = self.graphics_context.clone();
 
-        if let (Some(renderer), Some(queue)) = (
-            self.renderer.borrow_mut().as_mut(),
-            self.graphics_context.borrow().queue.as_ref(),
-        ) {
-            renderer.on_window_resized(queue, size);
+            spawn_local(async move {
+                web_sys::console::log_1(&"Resize".into());
+
+                let mut ctx_lock = ctx.lock().await;
+                ctx_lock.resize(size);
+            });
+        } else if size.width > 0 && size.height > 0 {
+            self.initialize();
         }
     }
 
     fn redraw(&mut self) {
-        if let Some(renderer) = self.renderer.borrow().as_ref() {
-            if let Err(e) = self.graphics_context.borrow_mut().redraw(renderer) {
-                show_error_popup_and_panic(e, "Failed to redraw");
+        //web_sys::console::log_1(&"Redraw".into());
+
+        let renderer = self.renderer.clone();
+        let ctx = self.graphics_context.clone();
+
+        spawn_local(async move {
+            let renderer_lock = renderer.lock().await;
+            if let Some(renderer) = renderer_lock.as_ref() {
+                let mut ctx_lock = ctx.lock().await;
+                if let Err(e) = ctx_lock.redraw(renderer) {
+                    show_error_popup_and_panic(e, "Failed to redraw");
+                }
             }
-        }
+        });
     }
 
     fn on_window_close_requested(&mut self) {
-        self.renderer.borrow_mut().take();
-        self.graphics_context.borrow_mut().destroy();
+        let renderer = self.renderer.clone();
+        let ctx = self.graphics_context.clone();
+
+        spawn_local(async move {
+            let mut renderer_lock = renderer.lock().await;
+            let mut ctx_lock = ctx.lock().await;
+
+            renderer_lock.take();
+            ctx_lock.destroy();
+        });
     }
 }
 
@@ -108,8 +152,10 @@ pub fn start() {
             canvas_id: Some("canvas"),
         },
         TestWindowEventHandler {
-            graphics_context: Rc::new(RefCell::new(GraphicsContext::new())),
-            renderer: Rc::new(RefCell::new(None)),
+            initialized: false,
+            window: None,
+            graphics_context: Arc::new(Mutex::new(GraphicsContext::new())),
+            renderer: Arc::new(Mutex::new(None)),
         },
     )
     .start_event_loop()

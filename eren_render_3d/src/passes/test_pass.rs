@@ -74,6 +74,8 @@ impl TestPass {
             push_constant_ranges: &[],
         });
 
+        println!("surface_format: {:?}", surface_format);
+
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("TestPass Pipeline"),
             layout: Some(&pipeline_layout),

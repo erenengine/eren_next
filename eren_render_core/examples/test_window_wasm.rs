@@ -22,7 +22,6 @@ pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str)
     panic!("{}: {}", context, error);
 }
 
-#[derive(Debug)]
 struct EmptyRenderer;
 
 impl Renderer for EmptyRenderer {

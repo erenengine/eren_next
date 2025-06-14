@@ -14,17 +14,17 @@ export interface InitOutput {
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export_5: WebAssembly.Table;
-  readonly closure360_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure484_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure368_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure492_externref_shim: (a: number, b: number, c: any) => void;
   readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h892417d0c99905c2: (a: number, b: number) => void;
+  readonly closure494_externref_shim: (a: number, b: number, c: any) => void;
   readonly closure486_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure478_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure480_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure490_externref_shim: (a: number, b: number, c: any, d: any) => void;
-  readonly closure476_externref_shim: (a: number, b: number, c: any) => void;
   readonly closure488_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure482_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure656_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure498_externref_shim: (a: number, b: number, c: any, d: any) => void;
+  readonly closure484_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure496_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure490_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure664_externref_shim: (a: number, b: number, c: any) => void;
   readonly __wbindgen_start: () => void;
 }
 
