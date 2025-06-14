@@ -48,8 +48,12 @@ impl<'a, R: Renderer> GraphicsContext<'a, R> {
     }
 
     pub async fn init(&mut self, window: Arc<Window>) -> Result<(), GraphicsContextError> {
-        let instance =
-            new_instance_with_webgpu_detection(&wgpu::InstanceDescriptor::default()).await;
+        let instance_desc = wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::GL, // WebGL 대상
+            ..Default::default()
+        };
+
+        let instance = new_instance_with_webgpu_detection(&instance_desc).await;
 
         let surface = instance.create_surface(window.clone())?;
 

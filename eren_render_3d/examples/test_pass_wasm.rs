@@ -144,6 +144,8 @@ fn main() {}
 
 #[wasm_bindgen(start)]
 pub fn start() {
+    console_error_panic_hook::set_once();
+
     match WindowLifecycleManager::new(
         WindowConfig {
             width: 800,

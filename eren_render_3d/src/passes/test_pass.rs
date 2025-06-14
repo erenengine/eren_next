@@ -10,6 +10,7 @@ const SHADER_STR: &str = include_str!("../shaders/test.wgsl");
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct QuadSize {
     pub size: [f32; 2],
+    _padding: [f32; 2],
 }
 
 pub struct TestPass {
@@ -25,6 +26,7 @@ impl TestPass {
 
         QuadSize {
             size: [ndc_width / 2.0, ndc_height / 2.0],
+            _padding: [0.0; 2],
         }
     }
 
@@ -39,6 +41,7 @@ impl TestPass {
         });
 
         let quad_size = Self::compute_quad_size(window_size);
+
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Quad Size Uniform Buffer"),
             contents: bytemuck::bytes_of(&quad_size),
@@ -53,7 +56,9 @@ impl TestPass {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: None,
+                    min_binding_size: Some(
+                        std::num::NonZeroU64::new(std::mem::size_of::<QuadSize>() as u64).unwrap(),
+                    ),
                 },
                 count: None,
             }],
@@ -73,8 +78,6 @@ impl TestPass {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-
-        println!("surface_format: {:?}", surface_format);
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("TestPass Pipeline"),
