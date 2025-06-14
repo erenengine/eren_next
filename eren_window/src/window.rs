@@ -26,7 +26,7 @@ pub trait WindowEventHandler {
     fn on_window_lost(&mut self);
     fn on_window_resized(&mut self, size: WindowSize);
     fn redraw(&mut self);
-    fn on_window_close_requested(&mut self);
+    fn on_window_close_requested(&mut self) {}
 }
 
 pub struct WindowLifecycleManager<E: WindowEventHandler> {
