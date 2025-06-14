@@ -4,12 +4,21 @@ use eren_render_vulkan_core::{
     context::GraphicsContext,
     renderer::{FrameContext, Renderer},
 };
-use eren_window::{
-    error::show_error_popup_and_panic,
-    window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
-};
+use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
 use winit::window::Window;
 
+use native_dialog::{DialogBuilder, MessageLevel};
+
+pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str) -> ! {
+    DialogBuilder::message()
+        .set_level(MessageLevel::Error)
+        .set_title(context)
+        .set_text(error.to_string())
+        .alert()
+        .show()
+        .unwrap();
+    panic!("{}: {}", context, error);
+}
 struct EmptyRenderer;
 
 impl Renderer for EmptyRenderer {
@@ -83,6 +92,7 @@ fn main() {
             width: 800,
             height: 600,
             title: "Test Window",
+            canvas_id: None,
         },
         TestWindowEventHandler {
             graphics_context: match GraphicsContext::new() {

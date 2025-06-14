@@ -1,16 +1,26 @@
 use std::sync::Arc;
 
-use eren_render_vulkan_3d::renderer::Renderer3D;
+use eren_render_vulkan_3d::renderers::test_renderer::TestRenderer;
 use eren_render_vulkan_core::context::GraphicsContext;
-use eren_window::{
-    error::show_error_popup_and_panic,
-    window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
-};
+use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
 use winit::window::Window;
 
+use native_dialog::{DialogBuilder, MessageLevel};
+
+pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str) -> ! {
+    DialogBuilder::message()
+        .set_level(MessageLevel::Error)
+        .set_title(context)
+        .set_text(error.to_string())
+        .alert()
+        .show()
+        .unwrap();
+    panic!("{}: {}", context, error);
+}
+
 struct TestWindowEventHandler {
-    graphics_context: GraphicsContext<Renderer3D>,
-    renderer: Option<Renderer3D>,
+    graphics_context: GraphicsContext<TestRenderer>,
+    renderer: Option<TestRenderer>,
 }
 
 impl TestWindowEventHandler {
@@ -23,7 +33,7 @@ impl TestWindowEventHandler {
 
         let swapchain_manager = self.graphics_context.swapchain_manager.as_ref().unwrap();
 
-        let renderer = match Renderer3D::new(
+        let renderer = match TestRenderer::new(
             logical_device_manager.logical_device.clone(),
             &self.graphics_context.swapchain_image_views,
             swapchain_manager.preferred_surface_format,
@@ -91,6 +101,7 @@ fn main() {
             width: 800,
             height: 600,
             title: "Test Window",
+            canvas_id: None,
         },
         TestWindowEventHandler {
             graphics_context: match GraphicsContext::new() {

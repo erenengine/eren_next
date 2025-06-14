@@ -2,16 +2,30 @@ use std::sync::Arc;
 
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
     event::{StartCause, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
 };
 
+#[cfg(not(target_arch = "wasm32"))]
+use winit::dpi::LogicalSize;
+
+#[cfg(target_arch = "wasm32")]
+use {
+    wasm_bindgen::JsCast, web_sys::HtmlCanvasElement,
+    winit::platform::web::WindowAttributesExtWebSys,
+};
+
 pub struct WindowConfig {
+    #[cfg(not(target_arch = "wasm32"))]
     pub width: u32,
+    #[cfg(not(target_arch = "wasm32"))]
     pub height: u32,
+    #[cfg(not(target_arch = "wasm32"))]
     pub title: &'static str,
+
+    #[cfg(target_arch = "wasm32")]
+    pub canvas_id: &'static str,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -75,8 +89,13 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
     }
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_none() {
-            let window = Arc::new(
+        if self.window.is_some() {
+            return;
+        }
+
+        let raw_window = {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
                 event_loop
                     .create_window(
                         Window::default_attributes()
@@ -86,13 +105,34 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
                                 self.config.height,
                             )),
                     )
-                    .unwrap(),
-            );
+                    .expect("Failed to create native window")
+            }
 
-            self.event_handler.on_window_ready(window.clone());
+            #[cfg(target_arch = "wasm32")]
+            {
+                // Look up the target <canvas> from the HTML document.
+                let canvas: HtmlCanvasElement = {
+                    let window = web_sys::window().expect("No global `window`");
+                    let document = window.document().expect("No Document");
+                    document
+                        .get_element_by_id(self.config.canvas_id)
+                        .unwrap_or_else(|| {
+                            panic!("Canvas element #{} not found", self.config.canvas_id)
+                        })
+                        .dyn_into::<HtmlCanvasElement>()
+                        .expect("Element is not a canvas")
+                };
 
-            self.window = Some(window);
-        }
+                event_loop
+                    .create_window(Window::default_attributes().with_canvas(Some(canvas)))
+                    .expect("Failed to create web window")
+            }
+        };
+
+        let window = Arc::new(raw_window);
+
+        self.event_handler.on_window_ready(window.clone());
+        self.window = Some(window);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {

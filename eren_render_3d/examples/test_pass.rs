@@ -2,11 +2,21 @@ use std::sync::Arc;
 
 use eren_render_3d::renderer::Renderer3D;
 use eren_render_core::context::GraphicsContext;
-use eren_window::{
-    error::show_error_popup_and_panic,
-    window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
-};
+use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
 use winit::window::Window;
+
+use native_dialog::{DialogBuilder, MessageLevel};
+
+pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str) -> ! {
+    DialogBuilder::message()
+        .set_level(MessageLevel::Error)
+        .set_title(context)
+        .set_text(error.to_string())
+        .alert()
+        .show()
+        .unwrap();
+    panic!("{}: {}", context, error);
+}
 
 struct TestWindowEventHandler<'a> {
     graphics_context: GraphicsContext<'a, Renderer3D>,
@@ -81,6 +91,7 @@ fn main() {
             width: 800,
             height: 600,
             title: "Test Window",
+            canvas_id: None,
         },
         TestWindowEventHandler {
             graphics_context: GraphicsContext::new(),
