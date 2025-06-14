@@ -3,5 +3,12 @@ name = "eren_render_3d"
 version = "0.1.0"
 edition = "2024"
 
+[dependencies]
+eren_render_core = { path = "../eren_render_core" }
+eren_window = { path = "../eren_window" }
+pollster = "0.4.0"
+wgpu = "25.0.2"
+winit = "0.30.11"
+
 [lib]
 crate-type = ["rlib", "cdylib"]

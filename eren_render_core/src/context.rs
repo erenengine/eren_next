@@ -4,6 +4,8 @@ use thiserror::Error;
 use eren_window::window::WindowSize;
 use winit::window::Window;
 
+use crate::renderer::{FrameContext, Renderer};
+
 #[derive(Debug, Error)]
 pub enum GraphicsContextError {
     #[error("Failed to create surface: {0}")]
@@ -16,38 +18,30 @@ pub enum GraphicsContextError {
     RequestDevice(#[from] wgpu::RequestDeviceError),
 }
 
-#[derive(Debug)]
-pub struct FrameContext<'a> {
-    pub view: &'a wgpu::TextureView,
-    pub encoder: &'a mut wgpu::CommandEncoder,
-}
-
-pub struct GraphicsContext<'a, F>
-where
-    F: Fn(&FrameContext),
-{
-    draw_frame: F,
+pub struct GraphicsContext<'a, R: Renderer> {
     instance: wgpu::Instance,
 
-    device: Option<wgpu::Device>,
+    pub device: Option<wgpu::Device>,
     queue: Option<wgpu::Queue>,
     surface: Option<wgpu::Surface<'a>>,
+    pub surface_format: Option<wgpu::TextureFormat>,
     surface_config: Option<wgpu::SurfaceConfiguration>,
+
+    phantom: std::marker::PhantomData<R>,
 }
 
-impl<'a, F> GraphicsContext<'a, F>
-where
-    F: Fn(&FrameContext),
-{
-    pub fn new(draw_frame: F) -> Self {
+impl<'a, R: Renderer> GraphicsContext<'a, R> {
+    pub fn new() -> Self {
         Self {
-            draw_frame,
             instance: wgpu::Instance::default(),
 
             device: None,
             queue: None,
             surface: None,
+            surface_format: None,
             surface_config: None,
+
+            phantom: std::marker::PhantomData,
         }
     }
 
@@ -65,10 +59,10 @@ where
 
         let limits = adapter.limits();
 
-        let mut request_device_descriptor = wgpu::DeviceDescriptor::default();
-        request_device_descriptor.required_limits = limits;
+        let mut request_device_desc = wgpu::DeviceDescriptor::default();
+        request_device_desc.required_limits = limits;
 
-        let (device, queue) = adapter.request_device(&request_device_descriptor).await?;
+        let (device, queue) = adapter.request_device(&request_device_desc).await?;
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -97,6 +91,7 @@ where
         self.device = Some(device);
         self.queue = Some(queue);
         self.surface = Some(surface);
+        self.surface_format = Some(surface_format);
         self.surface_config = Some(surface_config);
 
         Ok(())
@@ -113,13 +108,14 @@ where
     }
 
     pub fn destroy(&mut self) {
-        self.surface = None;
         self.surface_config = None;
-        self.device = None;
+        self.surface_format = None;
+        self.surface = None;
         self.queue = None;
+        self.device = None;
     }
 
-    pub fn redraw(&mut self) -> Result<(), wgpu::SurfaceError> {
+    pub fn redraw(&mut self, renderer: &R) -> Result<(), wgpu::SurfaceError> {
         if let (Some(device), Some(queue), Some(surface)) =
             (&self.device, &self.queue, &self.surface)
         {
@@ -130,7 +126,7 @@ where
             let mut encoder =
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
 
-            (self.draw_frame)(&FrameContext {
+            renderer.render(&mut FrameContext {
                 view: &view,
                 encoder: &mut encoder,
             });

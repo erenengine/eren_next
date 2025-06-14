@@ -1,29 +1,24 @@
 use std::sync::Arc;
 
-use eren_render_core::{
-    context::GraphicsContext,
-    renderer::{FrameContext, Renderer},
-};
+use eren_render_3d::renderer::Renderer3D;
+use eren_render_core::context::GraphicsContext;
 use eren_window::{
     error::show_error_popup_and_panic,
     window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize},
 };
 use winit::window::Window;
 
-struct EmptyRenderer;
-
-impl Renderer for EmptyRenderer {
-    fn render<'a>(&self, _frame_context: &mut FrameContext<'a>) {}
-}
-
 struct TestWindowEventHandler<'a> {
-    graphics_context: GraphicsContext<'a, EmptyRenderer>,
-    renderer: Option<EmptyRenderer>,
+    graphics_context: GraphicsContext<'a, Renderer3D>,
+    renderer: Option<Renderer3D>,
 }
 
 impl<'a> TestWindowEventHandler<'a> {
     fn recreate_renderer(&mut self) {
-        let renderer = EmptyRenderer;
+        let device = self.graphics_context.device.as_ref().unwrap();
+        let surface_format = self.graphics_context.surface_format.unwrap();
+
+        let renderer = Renderer3D::new(device, surface_format);
 
         self.renderer = Some(renderer);
     }

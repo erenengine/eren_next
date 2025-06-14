@@ -12,7 +12,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "Bevy Sprite Movement".into(),
+                    title: "Bevy Sprite Movement".to_owned(),
                     resolution: (WINDOW_WIDTH, WINDOW_HEIGHT).into(),
                     ..default()
                 }),
