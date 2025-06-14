@@ -1,20 +1,29 @@
 use std::sync::Arc;
 
+use thiserror::Error;
 use winit::{
     application::ApplicationHandler,
+    error::EventLoopError,
     event::{StartCause, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, EventLoop},
     window::{Window, WindowId},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
-use winit::dpi::LogicalSize;
+use winit::{dpi::LogicalSize, event_loop::ControlFlow};
 
 #[cfg(target_arch = "wasm32")]
 use {
-    wasm_bindgen::JsCast, web_sys::HtmlCanvasElement,
-    winit::platform::web::WindowAttributesExtWebSys,
+    wasm_bindgen::JsCast,
+    web_sys::HtmlCanvasElement,
+    winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys},
 };
+
+#[derive(Debug, Error)]
+pub enum WindowLifecycleManagerError {
+    #[error("Event loop error: {0}")]
+    EventLoopError(#[from] EventLoopError),
+}
 
 pub struct WindowConfig {
     #[cfg(not(target_arch = "wasm32"))]
@@ -71,11 +80,31 @@ impl<E: WindowEventHandler> WindowLifecycleManager<E> {
             self.event_handler.on_window_resized(new_size);
         }
     }
+}
 
-    pub fn start_event_loop(&mut self) {
-        let event_loop = EventLoop::new().unwrap();
+#[cfg(target_arch = "wasm32")]
+impl<E> WindowLifecycleManager<E>
+where
+    E: WindowEventHandler + 'static,
+{
+    pub fn start_event_loop(self) -> Result<(), WindowLifecycleManagerError> {
+        let event_loop = EventLoop::new()?;
+        event_loop.spawn_app(self);
+        Ok(())
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<E> WindowLifecycleManager<E>
+where
+    E: WindowEventHandler + 'static,
+{
+    /// Run the native event loop, propagating any error that might occur.
+    pub fn start_event_loop(&mut self) -> Result<(), WindowLifecycleManagerError> {
+        let event_loop = EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
-        event_loop.run_app(self).unwrap();
+        event_loop.run_app(self)?;
+        Ok(())
     }
 }
 
