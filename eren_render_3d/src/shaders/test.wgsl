@@ -1,20 +1,21 @@
-struct VertexOutput {
-    @builtin(position) position: vec4<f32>,
-};
+struct Uniforms {
+    size: vec2<f32>,
+}
+
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
 
 @vertex
-fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
+fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {
     var positions = array<vec2<f32>, 4>(
-        vec2<f32>(-0.025, -0.0333), // bottom-left
-        vec2<f32>( 0.025, -0.0333), // bottom-right
-        vec2<f32>(-0.025,  0.0333), // top-left
-        vec2<f32>( 0.025,  0.0333), // top-right
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0,  1.0),
     );
 
-    var out: VertexOutput;
-    let pos = positions[idx];
-    out.position = vec4<f32>(pos.x, pos.y, 0.0, 1.0);
-    return out;
+    let base = positions[idx] * uniforms.size;
+    return vec4<f32>(base, 0.0, 1.0);
 }
 
 @fragment

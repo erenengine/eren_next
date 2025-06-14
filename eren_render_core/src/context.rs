@@ -22,7 +22,7 @@ pub struct GraphicsContext<'a, R: Renderer> {
     instance: wgpu::Instance,
 
     pub device: Option<wgpu::Device>,
-    queue: Option<wgpu::Queue>,
+    pub queue: Option<wgpu::Queue>,
     surface: Option<wgpu::Surface<'a>>,
     pub surface_format: Option<wgpu::TextureFormat>,
     surface_config: Option<wgpu::SurfaceConfiguration>,

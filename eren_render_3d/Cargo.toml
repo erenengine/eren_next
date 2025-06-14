@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bytemuck = "1.23.1"
 eren_render_core = { path = "../eren_render_core" }
 eren_window = { path = "../eren_window" }
 pollster = "0.4.0"
