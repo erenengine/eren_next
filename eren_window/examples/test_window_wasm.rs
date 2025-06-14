@@ -47,12 +47,14 @@ impl WindowEventHandler for TestWindowEventHandler {
 
 fn main() {}
 
-#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn start() {
     match WindowLifecycleManager::new(
         WindowConfig {
-            canvas_id: "canvas",
+            width: 800,
+            height: 600,
+            title: "Test Window",
+            canvas_id: Some("canvas"),
         },
         TestWindowEventHandler,
     )

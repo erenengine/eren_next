@@ -26,15 +26,10 @@ pub enum WindowLifecycleManagerError {
 }
 
 pub struct WindowConfig {
-    #[cfg(not(target_arch = "wasm32"))]
     pub width: u32,
-    #[cfg(not(target_arch = "wasm32"))]
     pub height: u32,
-    #[cfg(not(target_arch = "wasm32"))]
     pub title: &'static str,
-
-    #[cfg(target_arch = "wasm32")]
-    pub canvas_id: &'static str,
+    pub canvas_id: Option<&'static str>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -82,24 +77,18 @@ impl<E: WindowEventHandler> WindowLifecycleManager<E> {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 impl<E> WindowLifecycleManager<E>
 where
     E: WindowEventHandler + 'static,
 {
+    #[cfg(target_arch = "wasm32")]
     pub fn start_event_loop(self) -> Result<(), WindowLifecycleManagerError> {
         let event_loop = EventLoop::new()?;
         event_loop.spawn_app(self);
         Ok(())
     }
-}
 
-#[cfg(not(target_arch = "wasm32"))]
-impl<E> WindowLifecycleManager<E>
-where
-    E: WindowEventHandler + 'static,
-{
-    /// Run the native event loop, propagating any error that might occur.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn start_event_loop(&mut self) -> Result<(), WindowLifecycleManagerError> {
         let event_loop = EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -144,9 +133,12 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
                     let window = web_sys::window().expect("No global `window`");
                     let document = window.document().expect("No Document");
                     document
-                        .get_element_by_id(self.config.canvas_id)
+                        .get_element_by_id(self.config.canvas_id.expect("Canvas ID is not set"))
                         .unwrap_or_else(|| {
-                            panic!("Canvas element #{} not found", self.config.canvas_id)
+                            panic!(
+                                "Canvas element #{} not found",
+                                self.config.canvas_id.expect("Canvas ID is not set")
+                            )
                         })
                         .dyn_into::<HtmlCanvasElement>()
                         .expect("Element is not a canvas")

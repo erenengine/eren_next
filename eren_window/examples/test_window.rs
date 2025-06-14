@@ -32,13 +32,18 @@ impl WindowEventHandler for TestWindowEventHandler {
 }
 
 fn main() {
-    WindowLifecycleManager::new(
+    match WindowLifecycleManager::new(
         WindowConfig {
             width: 800,
             height: 600,
             title: "Test Window",
+            canvas_id: None,
         },
         TestWindowEventHandler,
     )
-    .start_event_loop();
+    .start_event_loop()
+    {
+        Ok(_) => {}
+        Err(e) => eprintln!("Failed to start event loop: {}", e),
+    }
 }
