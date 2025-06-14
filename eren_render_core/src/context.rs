@@ -2,6 +2,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use eren_window::window::WindowSize;
+use wgpu::util::new_instance_with_webgpu_detection;
 use winit::window::Window;
 
 use crate::renderer::{FrameContext, Renderer};
@@ -19,7 +20,7 @@ pub enum GraphicsContextError {
 }
 
 pub struct GraphicsContext<'a, R: Renderer> {
-    instance: wgpu::Instance,
+    instance: Option<wgpu::Instance>,
 
     pub device: Option<wgpu::Device>,
     pub queue: Option<wgpu::Queue>,
@@ -34,7 +35,7 @@ pub struct GraphicsContext<'a, R: Renderer> {
 impl<'a, R: Renderer> GraphicsContext<'a, R> {
     pub fn new() -> Self {
         Self {
-            instance: wgpu::Instance::default(),
+            instance: None,
 
             device: None,
             queue: None,
@@ -47,10 +48,12 @@ impl<'a, R: Renderer> GraphicsContext<'a, R> {
     }
 
     pub async fn init(&mut self, window: Arc<Window>) -> Result<(), GraphicsContextError> {
-        let surface = self.instance.create_surface(window.clone())?;
+        let instance =
+            new_instance_with_webgpu_detection(&wgpu::InstanceDescriptor::default()).await;
 
-        let adapter = self
-            .instance
+        let surface = instance.create_surface(window.clone())?;
+
+        let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
@@ -90,6 +93,7 @@ impl<'a, R: Renderer> GraphicsContext<'a, R> {
 
         surface.configure(&device, &surface_config);
 
+        self.instance = Some(instance);
         self.device = Some(device);
         self.queue = Some(queue);
         self.surface = Some(surface);
