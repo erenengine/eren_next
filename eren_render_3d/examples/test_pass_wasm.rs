@@ -100,7 +100,7 @@ fn main() {}
 
 #[wasm_bindgen(start)]
 pub fn start() {
-    WindowLifecycleManager::new(
+    match WindowLifecycleManager::new(
         WindowConfig {
             width: 800,
             height: 600,
@@ -112,5 +112,9 @@ pub fn start() {
             renderer: Rc::new(RefCell::new(None)),
         },
     )
-    .start_event_loop();
+    .start_event_loop()
+    {
+        Ok(_) => {}
+        Err(e) => show_error_popup_and_panic(e, "Failed to start event loop"),
+    }
 }

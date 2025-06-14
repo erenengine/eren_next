@@ -183,6 +183,11 @@ impl<E: WindowEventHandler> ApplicationHandler for WindowLifecycleManager<E> {
             }
             WindowEvent::RedrawRequested => {
                 self.event_handler.redraw();
+
+                #[cfg(target_arch = "wasm32")]
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
             }
             _ => {}
         }

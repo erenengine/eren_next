@@ -47,9 +47,8 @@ impl<'a> WindowEventHandler for TestWindowEventHandler<'a> {
             window.inner_size().height
         );
 
-        match pollster::block_on(self.graphics_context.init(window)) {
-            Ok(_) => {}
-            Err(e) => show_error_popup_and_panic(e, "Failed to initialize graphics context"),
+        if let Err(e) = pollster::block_on(self.graphics_context.init(window)) {
+            show_error_popup_and_panic(e, "Failed to initialize graphics context");
         }
 
         self.recreate_renderer();
@@ -84,7 +83,7 @@ impl<'a> WindowEventHandler for TestWindowEventHandler<'a> {
 }
 
 fn main() {
-    WindowLifecycleManager::new(
+    match WindowLifecycleManager::new(
         WindowConfig {
             width: 800,
             height: 600,
@@ -96,5 +95,9 @@ fn main() {
             renderer: None,
         },
     )
-    .start_event_loop();
+    .start_event_loop()
+    {
+        Ok(_) => {}
+        Err(e) => show_error_popup_and_panic(e, "Failed to start event loop"),
+    }
 }

@@ -23,6 +23,7 @@ pub struct GraphicsContext<'a, R: Renderer> {
 
     pub device: Option<wgpu::Device>,
     pub queue: Option<wgpu::Queue>,
+
     surface: Option<wgpu::Surface<'a>>,
     pub surface_format: Option<wgpu::TextureFormat>,
     surface_config: Option<wgpu::SurfaceConfiguration>,
@@ -74,12 +75,13 @@ impl<'a, R: Renderer> GraphicsContext<'a, R> {
             .unwrap_or(surface_caps.formats[0]);
 
         let window_size = window.inner_size();
+        let scale_factor = window.scale_factor();
 
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width: window_size.width,
-            height: window_size.height,
+            width: window_size.width / scale_factor as u32,
+            height: window_size.height / scale_factor as u32,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],

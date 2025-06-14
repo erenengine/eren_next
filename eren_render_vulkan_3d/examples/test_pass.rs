@@ -96,7 +96,7 @@ impl WindowEventHandler for TestWindowEventHandler {
 }
 
 fn main() {
-    WindowLifecycleManager::new(
+    match WindowLifecycleManager::new(
         WindowConfig {
             width: 800,
             height: 600,
@@ -111,5 +111,9 @@ fn main() {
             renderer: None,
         },
     )
-    .start_event_loop();
+    .start_event_loop()
+    {
+        Ok(_) => {}
+        Err(e) => show_error_popup_and_panic(e, "Failed to start event loop"),
+    }
 }
