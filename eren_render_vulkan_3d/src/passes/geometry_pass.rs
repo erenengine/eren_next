@@ -24,13 +24,13 @@ pub enum GeometryPassError {
 }
 
 pub struct GeometryPass<'a> {
-    logical_device: &'a ash::Device,
+    device: &'a ash::Device,
     render_pass: vk::RenderPass,
 }
 
 impl<'a> GeometryPass<'a> {
     pub fn new(
-        logical_device: Arc<ash::Device>,
+        device: Arc<ash::Device>,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
@@ -85,13 +85,13 @@ impl<'a> GeometryPass<'a> {
             .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
-            logical_device
+            device
                 .create_render_pass2(&create_render_pass_info, None)
                 .map_err(|err| GeometryPassError::RenderPassCreationFailed(err))?
         };
 
         Ok(Self {
-            logical_device,
+            device,
             render_pass,
         })
     }
@@ -112,7 +112,7 @@ impl<'a> GeometryPass<'a> {
             vk::SubpassBeginInfo::default().contents(vk::SubpassContents::INLINE);
 
         unsafe {
-            self.logical_device.cmd_begin_render_pass2(
+            self.device.cmd_begin_render_pass2(
                 command_buffer,
                 &render_pass_begin_info,
                 &subpass_begin_info,
@@ -121,7 +121,7 @@ impl<'a> GeometryPass<'a> {
             //TODO:
             println!("Recording geometry pass");
 
-            self.logical_device
+            self.device
                 .cmd_end_render_pass2(command_buffer, &vk::SubpassEndInfo::default());
         }
     }
@@ -130,8 +130,7 @@ impl<'a> GeometryPass<'a> {
 impl<'a> Drop for GeometryPass<'a> {
     fn drop(&mut self) {
         unsafe {
-            self.logical_device
-                .destroy_render_pass(self.render_pass, None);
+            self.device.destroy_render_pass(self.render_pass, None);
         }
     }
 }

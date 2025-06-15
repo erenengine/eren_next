@@ -1,4 +1,3 @@
 //pub mod geometry_pass;
-//pub mod post_process;
-//pub mod shadow_pass;
+pub mod shadow_pass;
 pub mod test_pass;

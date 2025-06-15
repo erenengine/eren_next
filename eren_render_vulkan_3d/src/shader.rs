@@ -2,7 +2,7 @@ use ash::vk;
 use bytemuck::cast_slice;
 
 pub fn create_shader_module(
-    logical_device: &ash::Device,
+    device: &ash::Device,
     code: &[u8],
 ) -> Result<vk::ShaderModule, vk::Result> {
     assert_eq!(
@@ -18,5 +18,5 @@ pub fn create_shader_module(
 
     let create_info = vk::ShaderModuleCreateInfo::default().code(code_u32);
 
-    unsafe { logical_device.create_shader_module(&create_info, None) }
+    unsafe { device.create_shader_module(&create_info, None) }
 }

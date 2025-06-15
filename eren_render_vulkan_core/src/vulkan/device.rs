@@ -9,23 +9,23 @@ use crate::vulkan::{
 };
 
 #[derive(Debug, Error)]
-pub enum LogicalDeviceManagerError {
+pub enum DeviceManagerError {
     #[error("Failed to create device: {0}")]
     CreateDeviceFailed(String),
 }
 
-pub struct LogicalDeviceManager {
-    pub logical_device: Arc<ash::Device>,
+pub struct DeviceManager {
+    pub device: Arc<ash::Device>,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
 }
 
-impl LogicalDeviceManager {
+impl DeviceManager {
     pub fn new(
         instance: &ash::Instance,
         physical_device: vk::PhysicalDevice,
         queue_family_indices: &QueueFamilyIndices,
-    ) -> Result<Self, LogicalDeviceManagerError> {
+    ) -> Result<Self, DeviceManagerError> {
         let graphics_index = queue_family_indices.graphics_queue_family_index.unwrap();
         let present_index = queue_family_indices.present_queue_family_index.unwrap();
 
@@ -62,27 +62,27 @@ impl LogicalDeviceManager {
             .enabled_features(&required_device_features)
             .enabled_extension_names(&raw_required_device_extensions);
 
-        let logical_device = unsafe {
+        let device = unsafe {
             instance
                 .create_device(physical_device, &device_create_info, None)
-                .map_err(|e| LogicalDeviceManagerError::CreateDeviceFailed(e.to_string()))?
+                .map_err(|e| DeviceManagerError::CreateDeviceFailed(e.to_string()))?
         };
 
-        let graphics_queue = unsafe { logical_device.get_device_queue(graphics_index, 0) };
-        let present_queue = unsafe { logical_device.get_device_queue(present_index, 0) };
+        let graphics_queue = unsafe { device.get_device_queue(graphics_index, 0) };
+        let present_queue = unsafe { device.get_device_queue(present_index, 0) };
 
         Ok(Self {
-            logical_device: Arc::new(logical_device),
+            device: Arc::new(device),
             graphics_queue,
             present_queue,
         })
     }
 }
 
-impl Drop for LogicalDeviceManager {
+impl Drop for DeviceManager {
     fn drop(&mut self) {
         unsafe {
-            self.logical_device.destroy_device(None);
+            self.device.destroy_device(None);
         }
     }
 }

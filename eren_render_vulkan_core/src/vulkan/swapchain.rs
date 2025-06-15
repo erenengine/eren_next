@@ -33,7 +33,7 @@ impl SwapchainManager {
         surface: vk::SurfaceKHR,
         physical_device: vk::PhysicalDevice,
         queue_family_indices: &QueueFamilyIndices,
-        logical_device: &ash::Device,
+        device: &ash::Device,
     ) -> Result<Self, SwapchainManagerError> {
         let support_details =
             get_swapchain_support_details(surface_loader, surface, physical_device)?;
@@ -79,7 +79,7 @@ impl SwapchainManager {
                 swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
         }
 
-        let swapchain_loader = swapchain::Device::new(instance, logical_device);
+        let swapchain_loader = swapchain::Device::new(instance, device);
 
         let swapchain = unsafe {
             swapchain_loader

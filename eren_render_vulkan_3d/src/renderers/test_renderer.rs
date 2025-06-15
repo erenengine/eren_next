@@ -18,17 +18,12 @@ pub struct TestRenderer {
 
 impl TestRenderer {
     pub fn new(
-        logical_device: Arc<ash::Device>,
+        device: Arc<ash::Device>,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
     ) -> Result<Self, TestRendererError> {
-        let test_pass = TestPass::new(
-            logical_device,
-            swapchain_image_views,
-            surface_format,
-            image_extent,
-        )?;
+        let test_pass = TestPass::new(device, swapchain_image_views, surface_format, image_extent)?;
         Ok(Self { test_pass })
     }
 }

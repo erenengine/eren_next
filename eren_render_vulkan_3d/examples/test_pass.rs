@@ -25,16 +25,12 @@ struct TestWindowEventHandler {
 
 impl TestWindowEventHandler {
     fn recreate_renderer(&mut self) {
-        let logical_device_manager = self
-            .graphics_context
-            .logical_device_manager
-            .as_ref()
-            .unwrap();
+        let device_manager = self.graphics_context.device_manager.as_ref().unwrap();
 
         let swapchain_manager = self.graphics_context.swapchain_manager.as_ref().unwrap();
 
         let renderer = match TestRenderer::new(
-            logical_device_manager.logical_device.clone(),
+            device_manager.device.clone(),
             &self.graphics_context.swapchain_image_views,
             swapchain_manager.preferred_surface_format,
             swapchain_manager.image_extent,

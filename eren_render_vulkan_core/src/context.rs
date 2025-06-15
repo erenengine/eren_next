@@ -9,8 +9,8 @@ use crate::{
     constants::MAX_FRAMES_IN_FLIGHT,
     renderer::{FrameContext, Renderer},
     vulkan::{
+        device::{DeviceManager, DeviceManagerError},
         instance::{VulkanInstanceManager, VulkanInstanceManagerError},
-        logical_device::{LogicalDeviceManager, LogicalDeviceManagerError},
         physical_device::{PhysicalDeviceManager, PhysicalDeviceManagerError},
         surface::{SurfaceManager, SurfaceManagerError},
         swapchain::{SwapchainManager, SwapchainManagerError},
@@ -32,7 +32,7 @@ pub enum GraphicsContextError {
     CreatePhysicalDeviceFailed(#[from] PhysicalDeviceManagerError),
 
     #[error("Failed to create logical device: {0}")]
-    CreateLogicalDeviceFailed(#[from] LogicalDeviceManagerError),
+    CreateLogicalDeviceFailed(#[from] DeviceManagerError),
 
     #[error("Failed to create swapchain: {0}")]
     CreateSwapchainFailed(#[from] SwapchainManagerError),
@@ -87,7 +87,7 @@ pub struct GraphicsContext<R: Renderer> {
     instance_manager: Option<VulkanInstanceManager>,
     surface_manager: Option<SurfaceManager>,
     physical_device_manager: Option<PhysicalDeviceManager>,
-    pub logical_device_manager: Option<LogicalDeviceManager>,
+    pub device_manager: Option<DeviceManager>,
 
     pub swapchain_manager: Option<SwapchainManager>,
     pub swapchain_image_views: Vec<vk::ImageView>,
@@ -116,7 +116,7 @@ impl<R: Renderer> GraphicsContext<R> {
             instance_manager: None,
             surface_manager: None,
             physical_device_manager: None,
-            logical_device_manager: None,
+            device_manager: None,
             swapchain_manager: None,
 
             swapchain_image_views: Vec::new(),
@@ -144,15 +144,15 @@ impl<R: Renderer> GraphicsContext<R> {
             &surface_manager.surface_loader,
             surface_manager.surface,
         )?;
-        let logical_device_manager = LogicalDeviceManager::new(
+        let device_manager = DeviceManager::new(
             &instance_manager.instance,
             physical_device_manager.physical_device,
             &physical_device_manager.queue_family_indices,
         )?;
 
         let command_pool = unsafe {
-            logical_device_manager
-                .logical_device
+            device_manager
+                .device
                 .create_command_pool(
                     &vk::CommandPoolCreateInfo::default()
                         .queue_family_index(
@@ -168,8 +168,8 @@ impl<R: Renderer> GraphicsContext<R> {
         };
 
         self.command_buffers = unsafe {
-            logical_device_manager
-                .logical_device
+            device_manager
+                .device
                 .allocate_command_buffers(
                     &vk::CommandBufferAllocateInfo::default()
                         .command_pool(command_pool)
@@ -183,15 +183,15 @@ impl<R: Renderer> GraphicsContext<R> {
 
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             self.image_available_semaphores.push(unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .create_semaphore(&semaphore_create_info, None)
                     .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
             });
 
             self.frame_completion_fences.push(unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .create_fence(
                         &vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED),
                         None,
@@ -204,17 +204,17 @@ impl<R: Renderer> GraphicsContext<R> {
         self.instance_manager = Some(instance_manager);
         self.surface_manager = Some(surface_manager);
         self.physical_device_manager = Some(physical_device_manager);
-        self.logical_device_manager = Some(logical_device_manager);
+        self.device_manager = Some(device_manager);
         self.command_pool = Some(command_pool);
 
         self.create_swapchain()?;
 
         for _ in 0..self.swapchain_manager.as_ref().unwrap().amount_of_images {
             self.render_finished_semaphores.push(unsafe {
-                self.logical_device_manager
+                self.device_manager
                     .as_ref()
                     .unwrap()
-                    .logical_device
+                    .device
                     .create_semaphore(&semaphore_create_info, None)
                     .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
             });
@@ -231,13 +231,13 @@ impl<R: Renderer> GraphicsContext<R> {
             Some(instance_manager),
             Some(surface_manager),
             Some(physical_device_manager),
-            Some(logical_device_manager),
+            Some(device_manager),
         ) = (
             &self.window,
             &self.instance_manager,
             &self.surface_manager,
             &self.physical_device_manager,
-            &self.logical_device_manager,
+            &self.device_manager,
         ) {
             let swapchain_manager = SwapchainManager::new(
                 window,
@@ -246,7 +246,7 @@ impl<R: Renderer> GraphicsContext<R> {
                 surface_manager.surface,
                 physical_device_manager.physical_device,
                 &physical_device_manager.queue_family_indices,
-                &logical_device_manager.logical_device,
+                &device_manager.device,
             )?;
 
             for &image in &swapchain_manager.swapchain_images {
@@ -264,8 +264,8 @@ impl<R: Renderer> GraphicsContext<R> {
                     });
 
                 let image_view = unsafe {
-                    logical_device_manager
-                        .logical_device
+                    device_manager
+                        .device
                         .create_image_view(&create_info, None)
                         .map_err(|e| {
                             GraphicsContextError::CreateSwapchainImageViewsFailed(e.to_string())
@@ -287,65 +287,55 @@ impl<R: Renderer> GraphicsContext<R> {
 
     pub fn destroy(&mut self) {
         unsafe {
-            if let Some(logical_device_manager) = &self.logical_device_manager {
-                logical_device_manager
-                    .logical_device
+            if let Some(device_manager) = &self.device_manager {
+                device_manager
+                    .device
                     .device_wait_idle()
                     .expect("Failed to wait for device idle");
 
                 for &image_view in &self.swapchain_image_views {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_image_view(image_view, None);
+                    device_manager.device.destroy_image_view(image_view, None);
                 }
 
                 for &semaphore in self.image_available_semaphores.iter() {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_semaphore(semaphore, None);
+                    device_manager.device.destroy_semaphore(semaphore, None);
                 }
 
                 for &semaphore in self.render_finished_semaphores.iter() {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_semaphore(semaphore, None);
+                    device_manager.device.destroy_semaphore(semaphore, None);
                 }
 
                 for &fence in self.frame_completion_fences.iter() {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_fence(fence, None);
+                    device_manager.device.destroy_fence(fence, None);
                 }
 
                 // image_in_flight_fences contains copies of frame_completion_fences, no need to double destroy.
 
                 if let Some(command_pool) = self.command_pool {
-                    logical_device_manager
-                        .logical_device
+                    device_manager
+                        .device
                         .destroy_command_pool(command_pool, None);
                 }
             }
         }
 
         self.swapchain_manager = None;
-        self.logical_device_manager = None;
+        self.device_manager = None;
         self.physical_device_manager = None;
         self.surface_manager = None;
         self.instance_manager = None;
     }
 
     fn recreate_swapchain(&mut self) -> Result<(), GraphicsContextError> {
-        if let Some(logical_device_manager) = &self.logical_device_manager {
+        if let Some(device_manager) = &self.device_manager {
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .device_wait_idle()
                     .map_err(|e| GraphicsContextError::DeviceWaitIdleFailed(e.to_string()))?;
 
                 for &image_view in &self.swapchain_image_views {
-                    logical_device_manager
-                        .logical_device
-                        .destroy_image_view(image_view, None);
+                    device_manager.device.destroy_image_view(image_view, None);
                 }
             };
 
@@ -360,12 +350,12 @@ impl<R: Renderer> GraphicsContext<R> {
     pub fn redraw(&mut self, renderer: &R) -> Result<bool, GraphicsContextError> {
         let mut renderer_needs_recreation = false;
 
-        if let (Some(logical_device_manager), Some(swapchain_manager)) =
-            (&self.logical_device_manager, &self.swapchain_manager)
+        if let (Some(device_manager), Some(swapchain_manager)) =
+            (&self.device_manager, &self.swapchain_manager)
         {
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .wait_for_fences(
                         &[self.frame_completion_fences[self.current_frame]],
                         true,
@@ -389,8 +379,8 @@ impl<R: Renderer> GraphicsContext<R> {
             // Check if a previous frame is using this image (i.e. there is its fence to wait on)
             if self.image_in_flight_fences[image_index as usize] != vk::Fence::null() {
                 unsafe {
-                    logical_device_manager
-                        .logical_device
+                    device_manager
+                        .device
                         .wait_for_fences(
                             &[self.image_in_flight_fences[image_index as usize]],
                             true,
@@ -407,15 +397,15 @@ impl<R: Renderer> GraphicsContext<R> {
             let command_buffer = self.command_buffers[self.current_frame];
 
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())
                     .map_err(|e| GraphicsContextError::ResetCommandBufferFailed(e.to_string()))?;
             }
 
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .begin_command_buffer(command_buffer, &vk::CommandBufferBeginInfo::default())
                     .map_err(|e| GraphicsContextError::BeginCommandBufferFailed(e.to_string()))?;
             }
@@ -426,8 +416,8 @@ impl<R: Renderer> GraphicsContext<R> {
             });
 
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .end_command_buffer(command_buffer)
                     .map_err(|e| GraphicsContextError::EndCommandBufferFailed(e.to_string()))?;
             }
@@ -443,15 +433,15 @@ impl<R: Renderer> GraphicsContext<R> {
                 .signal_semaphores(&signal_semaphores)];
 
             unsafe {
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .reset_fences(&[self.frame_completion_fences[self.current_frame]])
                     .map_err(|e| GraphicsContextError::ResetFencesFailed(e.to_string()))?;
 
-                logical_device_manager
-                    .logical_device
+                device_manager
+                    .device
                     .queue_submit(
-                        logical_device_manager.graphics_queue,
+                        device_manager.graphics_queue,
                         &submit_infos,
                         self.frame_completion_fences[self.current_frame],
                     )
@@ -468,7 +458,7 @@ impl<R: Renderer> GraphicsContext<R> {
             let present_result = unsafe {
                 swapchain_manager
                     .swapchain_loader
-                    .queue_present(logical_device_manager.present_queue, &present_info)
+                    .queue_present(device_manager.present_queue, &present_info)
             };
 
             match present_result {

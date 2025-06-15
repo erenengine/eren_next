@@ -39,7 +39,7 @@ pub enum TestPassError {
 }
 
 pub struct TestPass {
-    logical_device: Arc<ash::Device>,
+    device: Arc<ash::Device>,
     render_pass: vk::RenderPass,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     render_area: vk::Rect2D,
@@ -53,7 +53,7 @@ pub struct TestPass {
 
 impl TestPass {
     pub fn new(
-        logical_device: Arc<ash::Device>,
+        device: Arc<ash::Device>,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
@@ -92,7 +92,7 @@ impl TestPass {
             .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
-            logical_device
+            device
                 .create_render_pass2(&create_render_pass_info, None)
                 .map_err(|e| TestPassError::RenderPassCreationFailed(e.to_string()))?
         };
@@ -107,17 +107,17 @@ impl TestPass {
                 .height(image_extent.height)
                 .layers(1);
             let framebuffer = unsafe {
-                logical_device
+                device
                     .create_framebuffer(&framebuffer_info, None)
                     .map_err(|e| TestPassError::FramebufferCreationFailed(e.to_string()))?
             };
             swapchain_framebuffers.push(framebuffer);
         }
 
-        let vertex_shader_module = create_shader_module(&logical_device, VERT_SHADER_BYTES)
+        let vertex_shader_module = create_shader_module(&device, VERT_SHADER_BYTES)
             .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
 
-        let fragment_shader_module = create_shader_module(&logical_device, FRAG_SHADER_BYTES)
+        let fragment_shader_module = create_shader_module(&device, FRAG_SHADER_BYTES)
             .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
 
         let main_function_name = std::ffi::CString::new("main").unwrap();
@@ -185,7 +185,7 @@ impl TestPass {
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
         let pipeline_layout = unsafe {
-            logical_device
+            device
                 .create_pipeline_layout(&pipeline_layout_info, None)
                 .map_err(|e| TestPassError::PipelineLayoutCreationFailed(e.to_string()))?
         };
@@ -203,13 +203,13 @@ impl TestPass {
             .subpass(0);
 
         let pipeline = unsafe {
-            logical_device
+            device
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
                 .expect("A problem with the pipeline creation")
         }[0];
 
         Ok(Self {
-            logical_device,
+            device,
             render_pass,
             swapchain_framebuffers,
             render_area: vk::Rect2D::default()
@@ -235,22 +235,22 @@ impl TestPass {
             vk::SubpassBeginInfo::default().contents(vk::SubpassContents::INLINE);
 
         unsafe {
-            self.logical_device.cmd_begin_render_pass2(
+            self.device.cmd_begin_render_pass2(
                 frame_context.command_buffer,
                 &render_pass_begin_info,
                 &subpass_begin_info,
             );
 
-            self.logical_device.cmd_bind_pipeline(
+            self.device.cmd_bind_pipeline(
                 frame_context.command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
 
-            self.logical_device
+            self.device
                 .cmd_draw(frame_context.command_buffer, 1, 1, 0, 0);
 
-            self.logical_device
+            self.device
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());
         }
     }
@@ -259,24 +259,23 @@ impl TestPass {
 impl Drop for TestPass {
     fn drop(&mut self) {
         unsafe {
-            self.logical_device
+            self.device
                 .device_wait_idle()
                 .expect("Failed to wait for device idle");
 
-            self.logical_device
-                .destroy_render_pass(self.render_pass, None);
+            self.device.destroy_render_pass(self.render_pass, None);
 
             for &framebuffer in self.swapchain_framebuffers.iter() {
-                self.logical_device.destroy_framebuffer(framebuffer, None);
+                self.device.destroy_framebuffer(framebuffer, None);
             }
 
-            self.logical_device
+            self.device
                 .destroy_shader_module(self.vertex_shader_module, None);
-            self.logical_device
+            self.device
                 .destroy_shader_module(self.fragment_shader_module, None);
 
-            self.logical_device.destroy_pipeline(self.pipeline, None);
-            self.logical_device
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
         }
     }
