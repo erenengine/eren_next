@@ -1,35 +1,33 @@
-use std::sync::Arc;
-
 use ash::vk;
 use eren_render_vulkan_core::renderer::{FrameContext, Renderer};
 use thiserror::Error;
 
-use crate::passes::test_pass::{TestPass, TestPassError};
+use crate::passes::shadow_pass::{ShadowPass, ShadowPassError};
 
 #[derive(Debug, Error)]
 pub enum Renderer3DError {
-    #[error("Failed to create test pass: {0}")]
-    TestPassCreationFailed(#[from] TestPassError),
+    #[error("Failed to create shadow pass: {0}")]
+    ShadowPassCreationFailed(#[from] ShadowPassError),
 }
 
 pub struct Renderer3D {
-    test_pass: TestPass,
+    shadow_pass: ShadowPass,
 }
 
 impl Renderer3D {
     pub fn new(
-        device: Arc<ash::Device>,
-        swapchain_image_views: &Vec<vk::ImageView>,
-        surface_format: vk::Format,
+        instance: &ash::Instance,
+        physical_device: vk::PhysicalDevice,
+        device: ash::Device,
         image_extent: vk::Extent2D,
     ) -> Result<Self, Renderer3DError> {
-        let test_pass = TestPass::new(device, swapchain_image_views, surface_format, image_extent)?;
-        Ok(Self { test_pass })
+        let shadow_pass = ShadowPass::new(instance, physical_device, device, image_extent)?;
+        Ok(Self { shadow_pass })
     }
 }
 
 impl Renderer for Renderer3D {
     fn render(&self, frame_context: &FrameContext) {
-        self.test_pass.record(frame_context);
+        self.shadow_pass.record(frame_context);
     }
 }

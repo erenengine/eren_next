@@ -84,9 +84,9 @@ pub struct GraphicsContext<R: Renderer> {
     entry: ash::Entry,
 
     window: Option<Arc<Window>>,
-    instance_manager: Option<VulkanInstanceManager>,
+    pub instance_manager: Option<VulkanInstanceManager>,
     surface_manager: Option<SurfaceManager>,
-    physical_device_manager: Option<PhysicalDeviceManager>,
+    pub physical_device_manager: Option<PhysicalDeviceManager>,
     pub device_manager: Option<DeviceManager>,
 
     pub swapchain_manager: Option<SwapchainManager>,
@@ -179,13 +179,13 @@ impl<R: Renderer> GraphicsContext<R> {
                 .map_err(|e| GraphicsContextError::CreateCommandBuffersFailed(e.to_string()))?
         };
 
-        let semaphore_create_info = vk::SemaphoreCreateInfo::default();
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
 
         for _ in 0..MAX_FRAMES_IN_FLIGHT {
             self.image_available_semaphores.push(unsafe {
                 device_manager
                     .device
-                    .create_semaphore(&semaphore_create_info, None)
+                    .create_semaphore(&semaphore_info, None)
                     .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
             });
 
@@ -215,7 +215,7 @@ impl<R: Renderer> GraphicsContext<R> {
                     .as_ref()
                     .unwrap()
                     .device
-                    .create_semaphore(&semaphore_create_info, None)
+                    .create_semaphore(&semaphore_info, None)
                     .map_err(|e| GraphicsContextError::CreateSemaphoresFailed(e.to_string()))?
             });
 

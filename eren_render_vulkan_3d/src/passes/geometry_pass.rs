@@ -23,14 +23,14 @@ pub enum GeometryPassError {
     RenderPassCreationFailed(String),
 }
 
-pub struct GeometryPass<'a> {
-    device: &'a ash::Device,
+pub struct GeometryPass {
+    device: ash::Device,
     render_pass: vk::RenderPass,
 }
 
-impl<'a> GeometryPass<'a> {
+impl GeometryPass {
     pub fn new(
-        device: Arc<ash::Device>,
+        device: ash::Device,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
@@ -79,14 +79,14 @@ impl<'a> GeometryPass<'a> {
             .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
 
-        let create_render_pass_info = vk::RenderPassCreateInfo2::default()
+        let render_pass_info = vk::RenderPassCreateInfo2::default()
             .attachments(&attachments)
             .subpasses(&subpasses)
             .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
             device
-                .create_render_pass2(&create_render_pass_info, None)
+                .create_render_pass2(&render_pass_info, None)
                 .map_err(|err| GeometryPassError::RenderPassCreationFailed(err))?
         };
 

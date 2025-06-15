@@ -63,7 +63,7 @@ impl VulkanInstanceManager {
             instance_create_flags |= vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
         }
 
-        let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+        let mut debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
                     | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
@@ -77,8 +77,8 @@ impl VulkanInstanceManager {
             )
             .pfn_user_callback(Some(vulkan_debug_utils_callback));
 
-        let instance_create_info = vk::InstanceCreateInfo::default()
-            .push_next(&mut debug_create_info)
+        let instance_info = vk::InstanceCreateInfo::default()
+            .push_next(&mut debug_info)
             .application_info(&app_info)
             .enabled_layer_names(&layer_name_pointers)
             .enabled_extension_names(&extension_name_pointers)
@@ -86,14 +86,14 @@ impl VulkanInstanceManager {
 
         let instance = unsafe {
             entry
-                .create_instance(&instance_create_info, None)
+                .create_instance(&instance_info, None)
                 .map_err(|e| VulkanInstanceManagerError::CreateInstanceFailed(e.to_string()))?
         };
 
         let debug_utils_loader = ash::ext::debug_utils::Instance::new(&entry, &instance);
         let debug_utils_messenger = unsafe {
             debug_utils_loader
-                .create_debug_utils_messenger(&debug_create_info, None)
+                .create_debug_utils_messenger(&debug_info, None)
                 .map_err(|e| {
                     VulkanInstanceManagerError::CreateDebugUtilsMessengerFailed(e.to_string())
                 })?

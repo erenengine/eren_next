@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ash::vk;
 use thiserror::Error;
 
@@ -15,7 +13,7 @@ pub enum DeviceManagerError {
 }
 
 pub struct DeviceManager {
-    pub device: Arc<ash::Device>,
+    pub device: ash::Device,
     pub graphics_queue: vk::Queue,
     pub present_queue: vk::Queue,
 }
@@ -29,22 +27,22 @@ impl DeviceManager {
         let graphics_index = queue_family_indices.graphics_queue_family_index.unwrap();
         let present_index = queue_family_indices.present_queue_family_index.unwrap();
 
-        let mut queue_create_infos = Vec::new();
+        let mut queue_infos = Vec::new();
         let queue_priority = [1.0f32];
 
         if graphics_index == present_index {
-            queue_create_infos.push(
+            queue_infos.push(
                 vk::DeviceQueueCreateInfo::default()
                     .queue_family_index(graphics_index)
                     .queue_priorities(&queue_priority),
             );
         } else {
-            queue_create_infos.push(
+            queue_infos.push(
                 vk::DeviceQueueCreateInfo::default()
                     .queue_family_index(graphics_index)
                     .queue_priorities(&queue_priority),
             );
-            queue_create_infos.push(
+            queue_infos.push(
                 vk::DeviceQueueCreateInfo::default()
                     .queue_family_index(present_index)
                     .queue_priorities(&queue_priority),
@@ -57,14 +55,14 @@ impl DeviceManager {
             .map(|s| s.as_ptr())
             .collect();
 
-        let device_create_info = vk::DeviceCreateInfo::default()
-            .queue_create_infos(&queue_create_infos)
+        let device_info = vk::DeviceCreateInfo::default()
+            .queue_create_infos(&queue_infos)
             .enabled_features(&required_device_features)
             .enabled_extension_names(&raw_required_device_extensions);
 
         let device = unsafe {
             instance
-                .create_device(physical_device, &device_create_info, None)
+                .create_device(physical_device, &device_info, None)
                 .map_err(|e| DeviceManagerError::CreateDeviceFailed(e.to_string()))?
         };
 
@@ -72,7 +70,7 @@ impl DeviceManager {
         let present_queue = unsafe { device.get_device_queue(present_index, 0) };
 
         Ok(Self {
-            device: Arc::new(device),
+            device,
             graphics_queue,
             present_queue,
         })

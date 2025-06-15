@@ -1,10 +1,11 @@
-use std::sync::Arc;
-
 use ash::vk;
 use eren_render_vulkan_core::renderer::FrameContext;
 use thiserror::Error;
 
 use crate::{constants::CLEAR_COLOR, shader::create_shader_module};
+
+const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.vert.spv");
+const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.frag.spv");
 
 const CLEAR_VALUES: [vk::ClearValue; 2] = [
     vk::ClearValue {
@@ -20,9 +21,6 @@ const CLEAR_VALUES: [vk::ClearValue; 2] = [
     },
 ];
 
-const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.vert.spv");
-const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.frag.spv");
-
 #[derive(Debug, Error)]
 pub enum TestPassError {
     #[error("Failed to create render pass: {0}")]
@@ -31,29 +29,29 @@ pub enum TestPassError {
     #[error("Failed to create framebuffer: {0}")]
     FramebufferCreationFailed(String),
 
+    #[error("Failed to create pipeline layout: {0}")]
+    PipelineLayoutCreationFailed(String),
+
     #[error("Failed to create shader module: {0}")]
     ShaderModuleCreationFailed(String),
 
-    #[error("Failed to create pipeline layout: {0}")]
-    PipelineLayoutCreationFailed(String),
+    #[error("Failed to create pipeline: {0}")]
+    PipelineCreationFailed(String),
 }
 
 pub struct TestPass {
-    device: Arc<ash::Device>,
+    device: ash::Device,
     render_pass: vk::RenderPass,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     render_area: vk::Rect2D,
 
-    vertex_shader_module: vk::ShaderModule,
-    fragment_shader_module: vk::ShaderModule,
-
-    pipeline: vk::Pipeline,
     pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
 }
 
 impl TestPass {
     pub fn new(
-        device: Arc<ash::Device>,
+        device: ash::Device,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
@@ -86,14 +84,14 @@ impl TestPass {
             .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
 
-        let create_render_pass_info = vk::RenderPassCreateInfo2::default()
+        let render_pass_info = vk::RenderPassCreateInfo2::default()
             .attachments(&attachments)
             .subpasses(&subpasses)
             .dependencies(&subpass_dependencies);
 
         let render_pass = unsafe {
             device
-                .create_render_pass2(&create_render_pass_info, None)
+                .create_render_pass2(&render_pass_info, None)
                 .map_err(|e| TestPassError::RenderPassCreationFailed(e.to_string()))?
         };
 
@@ -113,6 +111,13 @@ impl TestPass {
             };
             swapchain_framebuffers.push(framebuffer);
         }
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
+        let pipeline_layout = unsafe {
+            device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .map_err(|e| TestPassError::PipelineLayoutCreationFailed(e.to_string()))?
+        };
 
         let vertex_shader_module = create_shader_module(&device, VERT_SHADER_BYTES)
             .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
@@ -183,13 +188,6 @@ impl TestPass {
         let color_blend_info =
             vk::PipelineColorBlendStateCreateInfo::default().attachments(&color_blend_attachments);
 
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
-        let pipeline_layout = unsafe {
-            device
-                .create_pipeline_layout(&pipeline_layout_info, None)
-                .map_err(|e| TestPassError::PipelineLayoutCreationFailed(e.to_string()))?
-        };
-
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
             .stages(&shader_stages)
             .vertex_input_state(&vertex_input_info)
@@ -205,8 +203,13 @@ impl TestPass {
         let pipeline = unsafe {
             device
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-                .expect("A problem with the pipeline creation")
+                .map_err(|e| TestPassError::PipelineCreationFailed(e.1.to_string()))?
         }[0];
+
+        unsafe {
+            device.destroy_shader_module(vertex_shader_module, None);
+            device.destroy_shader_module(fragment_shader_module, None);
+        }
 
         Ok(Self {
             device,
@@ -215,9 +218,6 @@ impl TestPass {
             render_area: vk::Rect2D::default()
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
-
-            vertex_shader_module,
-            fragment_shader_module,
 
             pipeline,
             pipeline_layout,
@@ -263,20 +263,15 @@ impl Drop for TestPass {
                 .device_wait_idle()
                 .expect("Failed to wait for device idle");
 
-            self.device.destroy_render_pass(self.render_pass, None);
+            self.device.destroy_pipeline(self.pipeline, None);
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
 
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);
             }
 
-            self.device
-                .destroy_shader_module(self.vertex_shader_module, None);
-            self.device
-                .destroy_shader_module(self.fragment_shader_module, None);
-
-            self.device.destroy_pipeline(self.pipeline, None);
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
         }
     }
 }

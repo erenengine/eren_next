@@ -26,7 +26,6 @@ struct TestWindowEventHandler {
 impl TestWindowEventHandler {
     fn recreate_renderer(&mut self) {
         let device_manager = self.graphics_context.device_manager.as_ref().unwrap();
-
         let swapchain_manager = self.graphics_context.swapchain_manager.as_ref().unwrap();
 
         let renderer = match TestRenderer::new(

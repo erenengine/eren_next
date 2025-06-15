@@ -49,7 +49,7 @@ impl SwapchainManager {
         let image_extent = determine_swapchain_extent(&window, &support_details.capabilities);
         let present_mode = select_preferred_present_mode(&support_details.present_modes);
 
-        let mut swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
+        let mut swapchain_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
             .min_image_count(min_image_count)
             .image_format(surface_format.format)
@@ -71,19 +71,18 @@ impl SwapchainManager {
             && queue_family_indices.graphics_queue_family_index
                 != queue_family_indices.present_queue_family_index
         {
-            swapchain_create_info = swapchain_create_info
+            swapchain_info = swapchain_info
                 .image_sharing_mode(vk::SharingMode::CONCURRENT)
                 .queue_family_indices(&indices);
         } else {
-            swapchain_create_info =
-                swapchain_create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
+            swapchain_info = swapchain_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
         }
 
         let swapchain_loader = swapchain::Device::new(instance, device);
 
         let swapchain = unsafe {
             swapchain_loader
-                .create_swapchain(&swapchain_create_info, None)
+                .create_swapchain(&swapchain_info, None)
                 .map_err(|e| SwapchainManagerError::CreateSwapchainFailed(e.to_string()))
         }?;
 

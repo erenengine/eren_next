@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ash::vk;
 use eren_render_vulkan_core::renderer::{FrameContext, Renderer};
 use thiserror::Error;
@@ -18,7 +16,7 @@ pub struct TestRenderer {
 
 impl TestRenderer {
     pub fn new(
-        device: Arc<ash::Device>,
+        device: ash::Device,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
