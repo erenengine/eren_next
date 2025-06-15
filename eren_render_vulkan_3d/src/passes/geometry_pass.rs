@@ -3,6 +3,9 @@ use thiserror::Error;
 
 use crate::constants::CLEAR_COLOR;
 
+const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/geometry.vert.spv");
+const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/geometry.frag.spv");
+
 const CLEAR_VALUES: [vk::ClearValue; 2] = [
     vk::ClearValue {
         color: vk::ClearColorValue {
@@ -31,29 +34,25 @@ pub struct GeometryPass {
 impl GeometryPass {
     pub fn new(
         device: ash::Device,
-        swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
+        shadow_depth_image_view: vk::ImageView,
     ) -> Result<Self, GeometryPassError> {
         let color_attachment = vk::AttachmentDescription2::default()
             .format(surface_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .samples(vk::SampleCountFlags::TYPE_1);
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
         let depth_attachment = vk::AttachmentDescription2::default()
             .format(vk::Format::D32_SFLOAT)
+            .samples(vk::SampleCountFlags::TYPE_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .samples(vk::SampleCountFlags::TYPE_1);
+            .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
         let color_attachment_ref = vk::AttachmentReference2::default()
             .attachment(0)
@@ -65,29 +64,34 @@ impl GeometryPass {
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .aspect_mask(vk::ImageAspectFlags::DEPTH);
 
-        let attachments = [color_attachment, depth_attachment];
-
         let subpasses = [vk::SubpassDescription2::default()
             .color_attachments(std::slice::from_ref(&color_attachment_ref))
             .depth_stencil_attachment(&depth_attachment_ref)
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)];
 
-        let subpass_dependencies = [vk::SubpassDependency2::default()
-            .src_subpass(vk::SUBPASS_EXTERNAL)
-            .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_subpass(0)
-            .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)];
+        let attachments = [color_attachment, depth_attachment];
 
         let render_pass_info = vk::RenderPassCreateInfo2::default()
             .attachments(&attachments)
-            .subpasses(&subpasses)
-            .dependencies(&subpass_dependencies);
+            .subpasses(&subpasses);
 
         let render_pass = unsafe {
             device
                 .create_render_pass2(&render_pass_info, None)
-                .map_err(|err| GeometryPassError::RenderPassCreationFailed(err))?
+                .map_err(|e| GeometryPassError::RenderPassCreationFailed(e.to_string()))?
+        };
+
+        let framebuffer_info = vk::FramebufferCreateInfo::default()
+            .render_pass(render_pass)
+            .attachments(&[color_attachment_view, depth_attachment_view])
+            .width(extent.width)
+            .height(extent.height)
+            .layers(1);
+
+        let framebuffer = unsafe {
+            device
+                .create_framebuffer(&framebuffer_info, None)
+                .expect("Failed to create framebuffer")
         };
 
         Ok(Self {

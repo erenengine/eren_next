@@ -2,12 +2,10 @@ use ash::vk;
 use eren_render_vulkan_core::renderer::FrameContext;
 use thiserror::Error;
 
-use crate::{
-    constants::CLEAR_COLOR, render::render_item::RenderItem, shader::create_shader_module,
-};
+use crate::{constants::CLEAR_COLOR, shader::create_shader_module};
 
-const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.vert.spv");
-const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.frag.spv");
+const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/final.vert.spv");
+const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/final.frag.spv");
 
 const CLEAR_VALUES: [vk::ClearValue; 2] = [
     vk::ClearValue {
@@ -24,7 +22,7 @@ const CLEAR_VALUES: [vk::ClearValue; 2] = [
 ];
 
 #[derive(Debug, Error)]
-pub enum TestPassError {
+pub enum FinalPassError {
     #[error("Failed to create render pass: {0}")]
     RenderPassCreationFailed(String),
 
@@ -41,7 +39,7 @@ pub enum TestPassError {
     PipelineCreationFailed(String),
 }
 
-pub struct TestPass {
+pub struct FinalPass {
     device: ash::Device,
     render_pass: vk::RenderPass,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
@@ -51,22 +49,20 @@ pub struct TestPass {
     pipeline: vk::Pipeline,
 }
 
-impl TestPass {
+impl FinalPass {
     pub fn new(
         device: ash::Device,
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
-    ) -> Result<Self, TestPassError> {
+    ) -> Result<Self, FinalPassError> {
         let color_attachment = vk::AttachmentDescription2::default()
             .format(surface_format)
+            .samples(vk::SampleCountFlags::TYPE_1)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
-            .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
-            .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(vk::ImageLayout::UNDEFINED)
-            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .samples(vk::SampleCountFlags::TYPE_1);
+            .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
 
         let color_attachment_ref = vk::AttachmentReference2::default()
             .attachment(0)
@@ -94,7 +90,7 @@ impl TestPass {
         let render_pass = unsafe {
             device
                 .create_render_pass2(&render_pass_info, None)
-                .map_err(|e| TestPassError::RenderPassCreationFailed(e.to_string()))?
+                .map_err(|e| FinalPassError::RenderPassCreationFailed(e.to_string()))?
         };
 
         let mut swapchain_framebuffers = Vec::new();
@@ -109,7 +105,7 @@ impl TestPass {
             let framebuffer = unsafe {
                 device
                     .create_framebuffer(&framebuffer_info, None)
-                    .map_err(|e| TestPassError::FramebufferCreationFailed(e.to_string()))?
+                    .map_err(|e| FinalPassError::FramebufferCreationFailed(e.to_string()))?
             };
             swapchain_framebuffers.push(framebuffer);
         }
@@ -118,14 +114,14 @@ impl TestPass {
         let pipeline_layout = unsafe {
             device
                 .create_pipeline_layout(&pipeline_layout_info, None)
-                .map_err(|e| TestPassError::PipelineLayoutCreationFailed(e.to_string()))?
+                .map_err(|e| FinalPassError::PipelineLayoutCreationFailed(e.to_string()))?
         };
 
         let vertex_shader_module = create_shader_module(&device, VERT_SHADER_BYTES)
-            .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
+            .map_err(|e| FinalPassError::ShaderModuleCreationFailed(e.to_string()))?;
 
         let fragment_shader_module = create_shader_module(&device, FRAG_SHADER_BYTES)
-            .map_err(|e| TestPassError::ShaderModuleCreationFailed(e.to_string()))?;
+            .map_err(|e| FinalPassError::ShaderModuleCreationFailed(e.to_string()))?;
 
         let main_function_name = std::ffi::CString::new("main").unwrap();
 
@@ -143,7 +139,7 @@ impl TestPass {
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
 
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::default()
-            .topology(vk::PrimitiveTopology::POINT_LIST);
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
         let viewports = [vk::Viewport {
             x: 0.,
@@ -164,7 +160,6 @@ impl TestPass {
             .scissors(&scissors);
 
         let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::default()
-            .line_width(1.0)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .cull_mode(vk::CullModeFlags::NONE)
             .polygon_mode(vk::PolygonMode::FILL);
@@ -205,7 +200,7 @@ impl TestPass {
         let pipeline = unsafe {
             device
                 .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-                .map_err(|e| TestPassError::PipelineCreationFailed(e.1.to_string()))?
+                .map_err(|e| FinalPassError::PipelineCreationFailed(e.1.to_string()))?
         }[0];
 
         unsafe {
@@ -226,7 +221,7 @@ impl TestPass {
         })
     }
 
-    pub fn record(&self, frame_context: &FrameContext, _render_items: &[RenderItem]) {
+    pub fn record(&self, frame_context: &FrameContext, descriptor_set: vk::DescriptorSet) {
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .framebuffer(self.swapchain_framebuffers[frame_context.image_index])
@@ -249,8 +244,17 @@ impl TestPass {
                 self.pipeline,
             );
 
+            self.device.cmd_bind_descriptor_sets(
+                frame_context.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                0,
+                &[descriptor_set],
+                &[],
+            );
+
             self.device
-                .cmd_draw(frame_context.command_buffer, 1, 1, 0, 0);
+                .cmd_draw(frame_context.command_buffer, 3, 1, 0, 0);
 
             self.device
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());
@@ -258,7 +262,7 @@ impl TestPass {
     }
 }
 
-impl Drop for TestPass {
+impl Drop for FinalPass {
     fn drop(&mut self) {
         unsafe {
             self.device

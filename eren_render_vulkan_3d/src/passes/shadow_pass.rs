@@ -47,7 +47,9 @@ pub struct ShadowPass {
     device: ash::Device,
     image: vk::Image,
     memory: vk::DeviceMemory,
-    depth_image_view: vk::ImageView,
+
+    pub depth_image_view: vk::ImageView,
+
     render_pass: vk::RenderPass,
     framebuffer: vk::Framebuffer,
     render_area: vk::Rect2D,
