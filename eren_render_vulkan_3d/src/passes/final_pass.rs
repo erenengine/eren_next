@@ -7,19 +7,11 @@ use crate::{constants::CLEAR_COLOR, shader::create_shader_module};
 const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/final.vert.spv");
 const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/final.frag.spv");
 
-const CLEAR_VALUES: [vk::ClearValue; 2] = [
-    vk::ClearValue {
-        color: vk::ClearColorValue {
-            float32: CLEAR_COLOR,
-        },
+const CLEAR_VALUES: [vk::ClearValue; 1] = [vk::ClearValue {
+    color: vk::ClearColorValue {
+        float32: CLEAR_COLOR,
     },
-    vk::ClearValue {
-        depth_stencil: vk::ClearDepthStencilValue {
-            depth: 1.0,
-            stencil: 0,
-        },
-    },
-];
+}];
 
 #[derive(Debug, Error)]
 pub enum FinalPassError {
@@ -28,6 +20,18 @@ pub enum FinalPassError {
 
     #[error("Failed to create framebuffer: {0}")]
     FramebufferCreationFailed(String),
+
+    #[error("Failed to create sampler: {0}")]
+    SamplerCreationFailed(String),
+
+    #[error("Failed to create descriptor set layout: {0}")]
+    DescriptorSetLayoutCreationFailed(String),
+
+    #[error("Failed to create descriptor pool: {0}")]
+    DescriptorPoolCreationFailed(String),
+
+    #[error("Failed to allocate descriptor set: {0}")]
+    DescriptorSetAllocationFailed(String),
 
     #[error("Failed to create pipeline layout: {0}")]
     PipelineLayoutCreationFailed(String),
@@ -41,9 +45,15 @@ pub enum FinalPassError {
 
 pub struct FinalPass {
     device: ash::Device,
+
     render_pass: vk::RenderPass,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     render_area: vk::Rect2D,
+
+    sampler: vk::Sampler,
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+    descriptor_sets: Vec<vk::DescriptorSet>,
 
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
@@ -55,7 +65,7 @@ impl FinalPass {
         swapchain_image_views: &Vec<vk::ImageView>,
         surface_format: vk::Format,
         image_extent: vk::Extent2D,
-        descriptor_set_layout: vk::DescriptorSetLayout,
+        color_image_view: vk::ImageView,
     ) -> Result<Self, FinalPassError> {
         let color_attachment = vk::AttachmentDescription2::default()
             .format(surface_format)
@@ -108,6 +118,76 @@ impl FinalPass {
                     .map_err(|e| FinalPassError::FramebufferCreationFailed(e.to_string()))?
             };
             swapchain_framebuffers.push(framebuffer);
+        }
+
+        let sampler_create_info = vk::SamplerCreateInfo::default();
+        let sampler = unsafe {
+            device
+                .create_sampler(&sampler_create_info, None)
+                .map_err(|e| FinalPassError::SamplerCreationFailed(e.to_string()))?
+        };
+
+        let descriptor_set_layout_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+        let descriptor_set_layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(std::slice::from_ref(&descriptor_set_layout_binding));
+
+        let descriptor_set_layout = unsafe {
+            device
+                .create_descriptor_set_layout(&descriptor_set_layout_info, None)
+                .map_err(|e| FinalPassError::DescriptorSetLayoutCreationFailed(e.to_string()))?
+        };
+
+        let pool_size = vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+            descriptor_count: swapchain_image_views.len() as u32,
+        };
+
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(std::slice::from_ref(&pool_size))
+            .max_sets(swapchain_image_views.len() as u32)
+            .flags(vk::DescriptorPoolCreateFlags::empty());
+
+        let descriptor_pool = unsafe {
+            device
+                .create_descriptor_pool(&pool_info, None)
+                .map_err(|e| FinalPassError::DescriptorPoolCreationFailed(e.to_string()))?
+        };
+
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
+
+        let mut descriptor_sets: Vec<vk::DescriptorSet> = vec![];
+
+        for _ in 0..swapchain_image_views.len() {
+            let descriptor_set = unsafe {
+                device
+                    .allocate_descriptor_sets(&alloc_info)
+                    .map_err(|e| FinalPassError::DescriptorSetAllocationFailed(e.to_string()))?
+                    [0]
+            };
+
+            let image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(color_image_view)
+                .sampler(sampler);
+
+            let write = vk::WriteDescriptorSet::default()
+                .dst_set(descriptor_set)
+                .dst_binding(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .image_info(std::slice::from_ref(&image_info));
+
+            unsafe {
+                device.update_descriptor_sets(&[write], &[]);
+            }
+
+            descriptor_sets.push(descriptor_set);
         }
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
@@ -219,12 +299,17 @@ impl FinalPass {
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
 
-            pipeline,
+            sampler,
+            descriptor_pool,
+            descriptor_set_layout,
+            descriptor_sets,
+
             pipeline_layout,
+            pipeline,
         })
     }
 
-    pub fn record(&self, frame_context: &FrameContext, descriptor_set: vk::DescriptorSet) {
+    pub fn record(&self, frame_context: &FrameContext) {
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .framebuffer(self.swapchain_framebuffers[frame_context.image_index])
@@ -252,7 +337,7 @@ impl FinalPass {
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline_layout,
                 0,
-                &[descriptor_set],
+                &[self.descriptor_sets[frame_context.image_index]],
                 &[],
             );
 
@@ -275,6 +360,12 @@ impl Drop for FinalPass {
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+
+            self.device.destroy_sampler(self.sampler, None);
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
 
             for &framebuffer in self.swapchain_framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);

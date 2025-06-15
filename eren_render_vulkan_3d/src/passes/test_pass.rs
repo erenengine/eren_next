@@ -54,16 +54,16 @@ pub enum TestPassError {
 pub struct TestPass {
     device: ash::Device,
 
+    color_image: vk::Image,
+    color_image_memory: vk::DeviceMemory,
+    pub color_image_view: vk::ImageView,
+
     render_pass: vk::RenderPass,
     framebuffer: vk::Framebuffer,
     render_area: vk::Rect2D,
 
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
-
-    image: vk::Image,
-    image_memory: vk::DeviceMemory,
-    image_view: vk::ImageView,
 }
 
 impl TestPass {
@@ -269,12 +269,12 @@ impl TestPass {
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
 
-            pipeline,
-            pipeline_layout,
+            color_image: image,
+            color_image_memory: image_memory,
+            color_image_view: image_view,
 
-            image,
-            image_memory,
-            image_view,
+            pipeline_layout,
+            pipeline,
         })
     }
 
@@ -308,40 +308,6 @@ impl TestPass {
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());
         }
     }
-
-    pub fn create_descriptor_set(
-        &self,
-        descriptor_pool: vk::DescriptorPool,
-        descriptor_set_layout: vk::DescriptorSetLayout,
-        sampler: vk::Sampler,
-    ) -> Result<vk::DescriptorSet, TestPassError> {
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(descriptor_pool)
-            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
-
-        let descriptor_set = unsafe {
-            self.device
-                .allocate_descriptor_sets(&alloc_info)
-                .map_err(|e| TestPassError::DescriptorSetLayoutCreationFailed(e.to_string()))?[0]
-        };
-
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(self.image_view)
-            .sampler(sampler);
-
-        let write = vk::WriteDescriptorSet::default()
-            .dst_set(descriptor_set)
-            .dst_binding(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .image_info(std::slice::from_ref(&image_info));
-
-        unsafe {
-            self.device.update_descriptor_sets(&[write], &[]);
-        }
-
-        Ok(descriptor_set)
-    }
 }
 
 impl Drop for TestPass {
@@ -358,9 +324,9 @@ impl Drop for TestPass {
             self.device.destroy_framebuffer(self.framebuffer, None);
             self.device.destroy_render_pass(self.render_pass, None);
 
-            self.device.destroy_image_view(self.image_view, None);
-            self.device.destroy_image(self.image, None);
-            self.device.free_memory(self.image_memory, None);
+            self.device.destroy_image_view(self.color_image_view, None);
+            self.device.destroy_image(self.color_image, None);
+            self.device.free_memory(self.color_image_memory, None);
         }
     }
 }

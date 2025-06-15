@@ -181,6 +181,8 @@ impl TestWindowEventHandler {
             &instance_manager.instance,
             physical_device_manager.physical_device,
             device_manager.device.clone(),
+            &self.graphics_context.swapchain_image_views,
+            swapchain_manager.preferred_surface_format,
             swapchain_manager.image_extent,
         ) {
             Ok(renderer) => renderer,

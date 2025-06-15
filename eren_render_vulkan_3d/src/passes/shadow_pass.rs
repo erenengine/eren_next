@@ -1,7 +1,7 @@
 use ash::vk;
 use eren_render_vulkan_core::{
     renderer::FrameContext,
-    vulkan::memory::{MemoryError, create_image_with_memory},
+    vulkan::memory::{MemoryError, create_buffer_with_memory, create_image_with_memory},
 };
 use thiserror::Error;
 
@@ -15,6 +15,10 @@ const CLEAR_VALUES: [vk::ClearValue; 1] = [vk::ClearValue {
         stencil: 0,
     },
 }];
+
+pub struct LightVP {
+    pub light_view_proj: [[f32; 4]; 4],
+}
 
 #[derive(Debug, Error)]
 pub enum ShadowPassError {
@@ -30,8 +34,17 @@ pub enum ShadowPassError {
     #[error("Failed to create framebuffer: {0}")]
     FramebufferCreationFailed(String),
 
+    #[error("Failed to create buffer: {0}")]
+    CreateBufferFailed(MemoryError),
+
     #[error("Failed to create descriptor set layout: {0}")]
     DescriptorSetLayoutCreationFailed(String),
+
+    #[error("Failed to create descriptor pool: {0}")]
+    DescriptorPoolCreationFailed(String),
+
+    #[error("Failed to allocate descriptor set: {0}")]
+    DescriptorSetAllocationFailed(String),
 
     #[error("Failed to create pipeline layout: {0}")]
     PipelineLayoutCreationFailed(String),
@@ -45,16 +58,22 @@ pub enum ShadowPassError {
 
 pub struct ShadowPass {
     device: ash::Device,
-    image: vk::Image,
-    memory: vk::DeviceMemory,
 
+    depth_image: vk::Image,
+    depth_image_memory: vk::DeviceMemory,
     pub depth_image_view: vk::ImageView,
+
+    light_vp_buffer: vk::Buffer,
+    light_vp_buffer_memory: vk::DeviceMemory,
+
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+    descriptor_set: vk::DescriptorSet,
 
     render_pass: vk::RenderPass,
     framebuffer: vk::Framebuffer,
     render_area: vk::Rect2D,
 
-    descriptor_set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
 }
@@ -84,7 +103,7 @@ impl ShadowPass {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
-        let (image, memory) = create_image_with_memory(
+        let (depth_image, depth_image_memory) = create_image_with_memory(
             instance,
             physical_device,
             &device,
@@ -94,7 +113,7 @@ impl ShadowPass {
         .map_err(|e| ShadowPassError::CreateImageFailed(e))?;
 
         let depth_image_view_info = vk::ImageViewCreateInfo::default()
-            .image(image)
+            .image(depth_image)
             .view_type(vk::ImageViewType::TYPE_2D)
             .format(depth_format)
             .subresource_range(
@@ -152,21 +171,75 @@ impl ShadowPass {
                 .map_err(|e| ShadowPassError::FramebufferCreationFailed(e.to_string()))?
         };
 
-        // Create descriptor set layout matching shader
-        let ubo_binding = vk::DescriptorSetLayoutBinding::default()
+        let light_vp_buffer_size = std::mem::size_of::<LightVP>() as vk::DeviceSize;
+        let (light_vp_buffer, light_vp_buffer_memory) = create_buffer_with_memory(
+            instance,
+            physical_device,
+            &device,
+            light_vp_buffer_size,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .map_err(|e| ShadowPassError::CreateBufferFailed(e))?;
+
+        // Descriptor Set Layout
+        let ubo_layout_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::VERTEX);
 
-        let descriptor_set_layout_info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(std::slice::from_ref(&ubo_binding));
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(std::slice::from_ref(&ubo_layout_binding));
 
         let descriptor_set_layout = unsafe {
             device
-                .create_descriptor_set_layout(&descriptor_set_layout_info, None)
+                .create_descriptor_set_layout(&layout_info, None)
                 .map_err(|e| ShadowPassError::DescriptorSetLayoutCreationFailed(e.to_string()))?
         };
+
+        // Descriptor Pool
+        let pool_size = vk::DescriptorPoolSize {
+            ty: vk::DescriptorType::UNIFORM_BUFFER,
+            descriptor_count: 1,
+        };
+
+        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(std::slice::from_ref(&pool_size))
+            .max_sets(1);
+
+        let descriptor_pool = unsafe {
+            device
+                .create_descriptor_pool(&descriptor_pool_info, None)
+                .map_err(|e| ShadowPassError::DescriptorPoolCreationFailed(e.to_string()))?
+        };
+
+        // Descriptor Set Allocation
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
+
+        let descriptor_set = unsafe {
+            device
+                .allocate_descriptor_sets(&alloc_info)
+                .map_err(|e| ShadowPassError::DescriptorSetAllocationFailed(e.to_string()))?[0]
+        };
+
+        // Descriptor Write
+        let buffer_info = vk::DescriptorBufferInfo::default()
+            .buffer(light_vp_buffer)
+            .offset(0)
+            .range(light_vp_buffer_size);
+
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(descriptor_set)
+            .dst_binding(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .buffer_info(std::slice::from_ref(&buffer_info));
+
+        unsafe {
+            device.update_descriptor_sets(&[write], &[]);
+        }
 
         // Pipeline layout with descriptor set + push constant
         let push_constant_range = vk::PushConstantRange::default()
@@ -231,9 +304,9 @@ impl ShadowPass {
             .scissors(std::slice::from_ref(&scissors));
 
         let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::default()
+            .line_width(1.0)
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
             .cull_mode(vk::CullModeFlags::BACK)
-            .depth_clamp_enable(true)
             .polygon_mode(vk::PolygonMode::FILL);
 
         let depth_stencil_info = vk::PipelineDepthStencilStateCreateInfo::default()
@@ -266,16 +339,24 @@ impl ShadowPass {
 
         Ok(Self {
             device,
-            image,
-            memory,
+
+            depth_image,
+            depth_image_memory,
             depth_image_view,
+
+            light_vp_buffer,
+            light_vp_buffer_memory,
+
+            descriptor_pool,
+            descriptor_set_layout,
+            descriptor_set,
+
             render_pass,
             framebuffer,
             render_area: vk::Rect2D::default()
                 .offset(vk::Offset2D::default())
                 .extent(image_extent),
 
-            descriptor_set_layout,
             pipeline_layout,
             pipeline,
         })
@@ -304,9 +385,16 @@ impl ShadowPass {
                 self.pipeline,
             );
 
-            for render_item in render_items {
-                // bind vertex, index; no descriptor sets needed.
+            self.device.cmd_bind_descriptor_sets(
+                frame_context.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                0,
+                &[self.descriptor_set],
+                &[],
+            );
 
+            for render_item in render_items {
                 self.device.cmd_bind_vertex_buffers(
                     frame_context.command_buffer,
                     0,
@@ -319,6 +407,20 @@ impl ShadowPass {
                     render_item.mesh.index_buffer,
                     0,
                     vk::IndexType::UINT32,
+                );
+
+                let mat_ref: &[f32; 16] = std::mem::transmute(&render_item.transform);
+                let bytes: &[u8] = std::slice::from_raw_parts(
+                    mat_ref.as_ptr() as *const u8,
+                    std::mem::size_of::<[f32; 16]>(),
+                );
+
+                self.device.cmd_push_constants(
+                    frame_context.command_buffer,
+                    self.pipeline_layout,
+                    vk::ShaderStageFlags::VERTEX,
+                    0,
+                    bytes,
                 );
 
                 self.device.cmd_draw_indexed(
@@ -347,15 +449,21 @@ impl Drop for ShadowPass {
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
             self.device
                 .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+
+            self.device.destroy_buffer(self.light_vp_buffer, None);
+            self.device.free_memory(self.light_vp_buffer_memory, None);
 
             self.device.destroy_framebuffer(self.framebuffer, None);
             self.device.destroy_render_pass(self.render_pass, None);
 
             self.device.destroy_image_view(self.depth_image_view, None);
-            self.device.destroy_image(self.image, None);
-            self.device.free_memory(self.memory, None);
+            self.device.destroy_image(self.depth_image, None);
+            self.device.free_memory(self.depth_image_memory, None);
         }
     }
 }
