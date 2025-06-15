@@ -349,6 +349,14 @@ impl ShadowPass {
             );
 
             // TODO: Draw
+            /*
+            for mesh in meshes {
+                // bind vertex, index; no descriptor sets needed.
+                self.device.cmd_bind_vertex_buffers(frame.command_buffer, 0, &[mesh.vertex_buffer], &[0]);
+                self.device.cmd_bind_index_buffer(frame.command_buffer, mesh.index_buffer, 0, vk::IndexType::UINT32);
+                self.device.cmd_draw_indexed(frame.command_buffer, mesh.index_count, 1, 0, 0, 0);
+            }
+             */
 
             self.device
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());
