@@ -10,7 +10,9 @@ export VK_LAYER_PATH=$VULKAN_SDK/share/vulkan/explicit_layer.d
 ```
 glslc src/shaders/test.vert -o src/shaders/test.vert.spv
 glslc src/shaders/test.frag -o src/shaders/test.frag.spv
-
-glslc src/shaders/sprite.vert -o src/shaders/sprite.vert.spv
-glslc src/shaders/sprite.frag -o src/shaders/sprite.frag.spv
+```
+```
+glslc src/shaders/shadow.vert -o src/shaders/shadow.vert.spv
+glslc src/shaders/geometry.vert -o src/shaders/geometry.vert.spv
+glslc src/shaders/geometry.frag -o src/shaders/geometry.frag.spv
 ```
