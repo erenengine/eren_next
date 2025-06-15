@@ -5,8 +5,8 @@ use thiserror::Error;
 use crate::{
     passes::{
         final_pass::{FinalPass, FinalPassError},
-        geometry_pass::{GeometryPass, GeometryPassError},
-        shadow_pass::{ShadowPass, ShadowPassError},
+        geometry_pass::{CameraUBO, GeometryPass, GeometryPassError},
+        shadow_pass::{LightVP, ShadowPass, ShadowPassError},
     },
     render::render_item::RenderItem,
 };
@@ -55,6 +55,42 @@ impl Renderer3D {
             image_extent,
             geometry_pass.color_image_view,
         )?;
+
+        let proj = glam::Mat4::perspective_rh(
+            45_f32.to_radians(),
+            image_extent.width as f32 / image_extent.height as f32,
+            0.1,
+            100.0,
+        );
+        let view = glam::Mat4::look_at_rh(
+            glam::Vec3::new(3.0, 3.0, 3.0), // eye
+            glam::Vec3::ZERO,               // at
+            glam::Vec3::Y,                  // up
+        );
+        let view_proj = proj * view;
+
+        let light_view = glam::Mat4::look_at_rh(
+            glam::Vec3::new(4.0, 5.0, 2.0),
+            glam::Vec3::ZERO,
+            glam::Vec3::Y,
+        );
+        let light_proj = glam::Mat4::orthographic_rh(-6.0, 6.0, -6.0, 6.0, 0.1, 20.0);
+        let light_vp = light_proj * light_view;
+
+        shadow_pass.upload_light_vp_buffer(&LightVP {
+            light_view_proj: light_vp,
+        })?;
+
+        geometry_pass.upload_camera_buffer(&CameraUBO {
+            view_proj,
+            light_view_proj: light_vp,
+            light_dir: glam::Vec3::new(
+                -light_view.z_axis.x,
+                -light_view.z_axis.y,
+                -light_view.z_axis.z,
+            ),
+            _pad: 0.0,
+        })?;
 
         Ok(Self {
             shadow_pass,

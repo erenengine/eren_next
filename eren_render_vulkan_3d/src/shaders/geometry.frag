@@ -21,7 +21,8 @@ void main() {
 
   vec3 proj = vShadowPos.xyz / vShadowPos.w;
   proj = proj * 0.5 + 0.5;
-  float visibility = texture(uShadow, proj);
+  //float visibility = texture(uShadow, proj);
+  float visibility = 1.0;
   float lightTerm = diff * visibility;
 
   vec3 albedo = vec3(0.7);

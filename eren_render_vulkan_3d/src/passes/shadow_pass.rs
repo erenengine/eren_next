@@ -17,7 +17,7 @@ const CLEAR_VALUES: [vk::ClearValue; 1] = [vk::ClearValue {
 }];
 
 pub struct LightVP {
-    pub light_view_proj: [[f32; 4]; 4],
+    pub light_view_proj: glam::Mat4,
 }
 
 #[derive(Debug, Error)]
@@ -54,6 +54,9 @@ pub enum ShadowPassError {
 
     #[error("Failed to create pipeline: {0}")]
     PipelineCreationFailed(String),
+
+    #[error("Failed to map memory: {0}")]
+    MemoryMappingFailed(String),
 }
 
 pub struct ShadowPass {
@@ -360,6 +363,26 @@ impl ShadowPass {
             pipeline_layout,
             pipeline,
         })
+    }
+
+    pub fn upload_light_vp_buffer(&self, light_vp: &LightVP) -> Result<(), ShadowPassError> {
+        unsafe {
+            self.device
+                .map_memory(
+                    self.light_vp_buffer_memory,
+                    0,
+                    std::mem::size_of::<LightVP>() as vk::DeviceSize,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .map_err(|e| ShadowPassError::MemoryMappingFailed(e.to_string()))
+                .and_then(|ptr| {
+                    std::ptr::copy_nonoverlapping(light_vp, ptr as *mut LightVP, 1);
+                    Ok(())
+                })
+                .map_err(|e| ShadowPassError::MemoryMappingFailed(e.to_string()))?;
+        }
+
+        Ok(())
     }
 
     pub fn record(&self, frame_context: &FrameContext, render_items: &[RenderItem]) {

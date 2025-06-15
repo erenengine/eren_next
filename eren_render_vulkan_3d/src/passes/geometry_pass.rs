@@ -27,11 +27,11 @@ const CLEAR_VALUES: [vk::ClearValue; 2] = [
 ];
 
 pub struct CameraUBO {
-    pub view_proj: [[f32; 4]; 4],
-    pub light_view_proj: [[f32; 4]; 4],
-    pub light_dir: [f32; 3],
+    pub view_proj: glam::Mat4,
+    pub light_view_proj: glam::Mat4,
+    pub light_dir: glam::Vec3,
     // Alignment padding to satisfy std140 layout
-    _pad: f32,
+    pub _pad: f32,
 }
 
 #[derive(Debug, Error)]
@@ -71,6 +71,9 @@ pub enum GeometryPassError {
 
     #[error("Failed to create pipeline: {0}")]
     PipelineCreationFailed(String),
+
+    #[error("Failed to map memory: {0}")]
+    MemoryMappingFailed(String),
 }
 
 pub struct GeometryPass {
@@ -132,11 +135,12 @@ impl GeometryPass {
         )
         .map_err(|e| GeometryPassError::CreateImageFailed(e))?;
 
+        let camera_buffer_size = std::mem::size_of::<CameraUBO>() as vk::DeviceSize;
         let (camera_buffer, camera_buffer_memory) = create_buffer_with_memory(
             instance,
             physical_device,
             &device,
-            (std::mem::size_of::<CameraUBO>() as vk::DeviceSize) * 2,
+            camera_buffer_size,
             vk::BufferUsageFlags::UNIFORM_BUFFER,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )
@@ -225,7 +229,6 @@ impl GeometryPass {
             address_mode_u: vk::SamplerAddressMode::CLAMP_TO_EDGE,
             address_mode_v: vk::SamplerAddressMode::CLAMP_TO_EDGE,
             address_mode_w: vk::SamplerAddressMode::CLAMP_TO_EDGE,
-            compare_op: vk::CompareOp::LESS_OR_EQUAL,
             border_color: vk::BorderColor::FLOAT_OPAQUE_WHITE,
             min_lod: 0.0,
             max_lod: 1.0,
@@ -287,7 +290,7 @@ impl GeometryPass {
         let camera_buffer_info = vk::DescriptorBufferInfo::default()
             .buffer(camera_buffer)
             .offset(0)
-            .range(std::mem::size_of::<CameraUBO>() as u64);
+            .range(camera_buffer_size);
 
         let camera_write = vk::WriteDescriptorSet::default()
             .dst_set(camera_descriptor_set)
@@ -489,6 +492,26 @@ impl GeometryPass {
             pipeline_layout,
             pipeline,
         })
+    }
+
+    pub fn upload_camera_buffer(&self, camera: &CameraUBO) -> Result<(), GeometryPassError> {
+        unsafe {
+            self.device
+                .map_memory(
+                    self.camera_buffer_memory,
+                    0,
+                    std::mem::size_of::<CameraUBO>() as vk::DeviceSize,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .map_err(|e| GeometryPassError::MemoryMappingFailed(e.to_string()))
+                .and_then(|ptr| {
+                    std::ptr::copy_nonoverlapping(camera, ptr as *mut CameraUBO, 1);
+                    Ok(())
+                })
+                .map_err(|e| GeometryPassError::MemoryMappingFailed(e.to_string()))?;
+        }
+
+        Ok(())
     }
 
     pub fn record(&self, frame_context: &FrameContext, render_items: &[RenderItem]) {
