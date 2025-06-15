@@ -1,8 +1,11 @@
 use ash::vk;
-use eren_render_vulkan_core::renderer::FrameContext;
+use eren_render_vulkan_core::{
+    renderer::FrameContext,
+    vulkan::memory::{MemoryError, create_image_with_memory},
+};
 use thiserror::Error;
 
-use crate::shader::create_shader_module;
+use crate::{render::render_item::RenderItem, shader::create_shader_module};
 
 const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/shadow.vert.spv");
 
@@ -16,16 +19,7 @@ const CLEAR_VALUES: [vk::ClearValue; 1] = [vk::ClearValue {
 #[derive(Debug, Error)]
 pub enum ShadowPassError {
     #[error("Failed to create image: {0}")]
-    CreateImageFailed(String),
-
-    #[error("Failed to find suitable memory type")]
-    FindSuitableMemoryTypeFailed,
-
-    #[error("Failed to allocate memory: {0}")]
-    AllocateMemoryFailed(String),
-
-    #[error("Failed to bind memory to image: {0}")]
-    BindMemoryToImageFailed(String),
+    CreateImageFailed(MemoryError),
 
     #[error("Failed to create image view: {0}")]
     CreateImageViewFailed(String),
@@ -88,48 +82,14 @@ impl ShadowPass {
             .sharing_mode(vk::SharingMode::EXCLUSIVE)
             .initial_layout(vk::ImageLayout::UNDEFINED);
 
-        let image = unsafe {
-            device
-                .create_image(&image_info, None)
-                .map_err(|e| ShadowPassError::CreateImageFailed(e.to_string()))?
-        };
-
-        let mem_requirements = unsafe { device.get_image_memory_requirements(image) };
-        let mem_properties =
-            unsafe { instance.get_physical_device_memory_properties(physical_device) };
-
-        let mut mem_type_index: Option<u32> = None;
-
-        for i in 0..mem_properties.memory_type_count {
-            if (mem_requirements.memory_type_bits & (1 << i)) != 0
-                && mem_properties.memory_types[i as usize]
-                    .property_flags
-                    .contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
-            {
-                mem_type_index = Some(i);
-                break;
-            }
-        }
-
-        if mem_type_index.is_none() {
-            return Err(ShadowPassError::FindSuitableMemoryTypeFailed);
-        }
-
-        let alloc_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(mem_requirements.size)
-            .memory_type_index(mem_type_index.unwrap());
-
-        let memory = unsafe {
-            device
-                .allocate_memory(&alloc_info, None)
-                .map_err(|e| ShadowPassError::AllocateMemoryFailed(e.to_string()))?
-        };
-
-        unsafe {
-            device
-                .bind_image_memory(image, memory, 0)
-                .map_err(|e| ShadowPassError::BindMemoryToImageFailed(e.to_string()))?;
-        }
+        let (image, memory) = create_image_with_memory(
+            instance,
+            physical_device,
+            &device,
+            &image_info,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )
+        .map_err(|e| ShadowPassError::CreateImageFailed(e))?;
 
         let depth_image_view_info = vk::ImageViewCreateInfo::default()
             .image(image)
@@ -325,7 +285,7 @@ impl ShadowPass {
         })
     }
 
-    pub fn record(&self, frame_context: &FrameContext) {
+    pub fn record(&self, frame_context: &FrameContext, render_items: &[RenderItem]) {
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .framebuffer(self.framebuffer)
@@ -348,15 +308,32 @@ impl ShadowPass {
                 self.pipeline,
             );
 
-            // TODO: Draw
-            /*
-            for mesh in meshes {
+            for render_item in render_items {
                 // bind vertex, index; no descriptor sets needed.
-                self.device.cmd_bind_vertex_buffers(frame.command_buffer, 0, &[mesh.vertex_buffer], &[0]);
-                self.device.cmd_bind_index_buffer(frame.command_buffer, mesh.index_buffer, 0, vk::IndexType::UINT32);
-                self.device.cmd_draw_indexed(frame.command_buffer, mesh.index_count, 1, 0, 0, 0);
+
+                self.device.cmd_bind_vertex_buffers(
+                    frame_context.command_buffer,
+                    0,
+                    &[render_item.mesh.vertex_buffer],
+                    &[0],
+                );
+
+                self.device.cmd_bind_index_buffer(
+                    frame_context.command_buffer,
+                    render_item.mesh.index_buffer,
+                    0,
+                    vk::IndexType::UINT32,
+                );
+
+                self.device.cmd_draw_indexed(
+                    frame_context.command_buffer,
+                    render_item.mesh.index_count,
+                    1,
+                    0,
+                    0,
+                    0,
+                );
             }
-             */
 
             self.device
                 .cmd_end_render_pass2(frame_context.command_buffer, &vk::SubpassEndInfo::default());

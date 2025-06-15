@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use eren_render_vulkan_3d::renderers::test_renderer::TestRenderer;
+use eren_render_vulkan_3d::render::test_renderer::TestRenderer;
 use eren_render_vulkan_core::context::GraphicsContext;
 use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
 use winit::window::Window;
@@ -19,7 +19,7 @@ pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str)
 }
 
 struct TestWindowEventHandler {
-    graphics_context: GraphicsContext<TestRenderer>,
+    graphics_context: GraphicsContext,
     renderer: Option<TestRenderer>,
 }
 
@@ -73,7 +73,7 @@ impl WindowEventHandler for TestWindowEventHandler {
 
     fn redraw(&mut self) {
         if let Some(renderer) = &self.renderer {
-            match self.graphics_context.redraw(renderer) {
+            match self.graphics_context.redraw(renderer, &[]) {
                 Ok(renderer_needs_recreation) => {
                     if renderer_needs_recreation {
                         self.recreate_renderer();

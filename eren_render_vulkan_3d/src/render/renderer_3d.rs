@@ -2,7 +2,10 @@ use ash::vk;
 use eren_render_vulkan_core::renderer::{FrameContext, Renderer};
 use thiserror::Error;
 
-use crate::passes::shadow_pass::{ShadowPass, ShadowPassError};
+use crate::{
+    passes::shadow_pass::{ShadowPass, ShadowPassError},
+    render::render_item::RenderItem,
+};
 
 #[derive(Debug, Error)]
 pub enum Renderer3DError {
@@ -26,8 +29,8 @@ impl Renderer3D {
     }
 }
 
-impl Renderer for Renderer3D {
-    fn render(&self, frame_context: &FrameContext) {
-        self.shadow_pass.record(frame_context);
+impl Renderer<RenderItem> for Renderer3D {
+    fn render(&self, frame_context: &FrameContext, render_items: &[RenderItem]) {
+        self.shadow_pass.record(frame_context, render_items);
     }
 }

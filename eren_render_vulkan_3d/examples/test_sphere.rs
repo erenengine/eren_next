@@ -1,11 +1,33 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
-use eren_render_vulkan_3d::renderers::renderer_3d::Renderer3D;
-use eren_render_vulkan_core::context::GraphicsContext;
+use ash::vk;
+use eren_render_vulkan_3d::render::{
+    render_item::{Material, Mesh, RenderItem},
+    renderer_3d::Renderer3D,
+};
+use eren_render_vulkan_core::{
+    context::GraphicsContext,
+    vulkan::memory::{MemoryError, create_buffer_with_memory},
+};
 use eren_window::window::{WindowConfig, WindowEventHandler, WindowLifecycleManager, WindowSize};
 use winit::window::Window;
 
 use native_dialog::{DialogBuilder, MessageLevel};
+
+const PLANE_VERTS: [[f32; 8]; 4] = [
+    [-1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    [1.0, 0.0, -1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+    [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0],
+    [-1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0],
+];
+const PLANE_IDXS: [u32; 6] = [0, 1, 2, 2, 3, 0];
+
+const SPHERE_VERTS: [[f32; 8]; 3] = [
+    [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1.0],
+    [-1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+    [1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+];
+const SPHERE_IDXS: [u32; 3] = [0, 1, 2];
 
 pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str) -> ! {
     DialogBuilder::message()
@@ -18,9 +40,105 @@ pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str)
     panic!("{}: {}", context, error);
 }
 
+fn create_mesh_from_data(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    device: &ash::Device,
+    vertices: &[[f32; 8]],
+    indices: &[u32],
+) -> Result<Arc<Mesh>, MemoryError> {
+    let vertex_buffer_size = (vertices.len() * size_of::<[f32; 8]>()) as vk::DeviceSize;
+    let index_buffer_size = (indices.len() * size_of::<u32>()) as vk::DeviceSize;
+
+    // Vertex buffer
+    let (vertex_buffer, vertex_memory) = create_buffer_with_memory(
+        instance,
+        physical_device,
+        device,
+        vertex_buffer_size,
+        vk::BufferUsageFlags::VERTEX_BUFFER,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
+
+    // Map vertex buffer memory and copy data
+    unsafe {
+        let data_ptr = device
+            .map_memory(
+                vertex_memory,
+                0,
+                vertex_buffer_size,
+                vk::MemoryMapFlags::empty(),
+            )
+            .expect("Failed to map vertex memory") as *mut [f32; 8];
+
+        std::ptr::copy_nonoverlapping(vertices.as_ptr(), data_ptr, vertices.len());
+
+        device.unmap_memory(vertex_memory);
+    }
+
+    // Index buffer
+    let (index_buffer, index_memory) = create_buffer_with_memory(
+        instance,
+        physical_device,
+        device,
+        index_buffer_size,
+        vk::BufferUsageFlags::INDEX_BUFFER,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
+
+    // Map index buffer memory and copy data
+    unsafe {
+        let data_ptr = device
+            .map_memory(
+                index_memory,
+                0,
+                index_buffer_size,
+                vk::MemoryMapFlags::empty(),
+            )
+            .expect("Failed to map index memory") as *mut u32;
+
+        std::ptr::copy_nonoverlapping(indices.as_ptr(), data_ptr, indices.len());
+
+        device.unmap_memory(index_memory);
+    }
+
+    Ok(Arc::new(Mesh {
+        vertex_buffer,
+        vertex_memory,
+        index_buffer,
+        index_memory,
+        index_count: indices.len() as u32,
+    }))
+}
+
+fn create_dummy_material(device: &ash::Device) -> Result<Arc<Material>, vk::Result> {
+    let layout_info = vk::DescriptorSetLayoutCreateInfo::default();
+    let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
+    let descriptor_set_layouts = vec![descriptor_set_layout];
+
+    let pool_info = vk::DescriptorPoolCreateInfo::default()
+        .max_sets(1)
+        .pool_sizes(&[]);
+
+    let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None)? };
+
+    let alloc_info = vk::DescriptorSetAllocateInfo::default()
+        .descriptor_pool(descriptor_pool)
+        .set_layouts(&descriptor_set_layouts);
+
+    let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+    Ok(Arc::new(Material {
+        descriptor_set_layout,
+        descriptor_pool,
+        descriptor_set: descriptor_sets[0],
+    }))
+}
+
 struct TestWindowEventHandler {
-    graphics_context: GraphicsContext<Renderer3D>,
+    graphics_context: GraphicsContext,
     renderer: Option<Renderer3D>,
+    render_items: Vec<RenderItem>,
 }
 
 impl TestWindowEventHandler {
@@ -45,6 +163,84 @@ impl TestWindowEventHandler {
         };
 
         self.renderer = Some(renderer);
+
+        let plane_mesh = match create_mesh_from_data(
+            &instance_manager.instance,
+            physical_device_manager.physical_device,
+            &device_manager.device,
+            &PLANE_VERTS,
+            &PLANE_IDXS,
+        ) {
+            Ok(mesh) => mesh,
+            Err(e) => show_error_popup_and_panic(e, "Failed to create plane mesh"),
+        };
+
+        let sphere_mesh = match create_mesh_from_data(
+            &instance_manager.instance,
+            physical_device_manager.physical_device,
+            &device_manager.device,
+            &SPHERE_VERTS,
+            &SPHERE_IDXS,
+        ) {
+            Ok(mesh) => mesh,
+            Err(e) => show_error_popup_and_panic(e, "Failed to create sphere mesh"),
+        };
+
+        let material = match create_dummy_material(&device_manager.device) {
+            Ok(material) => material,
+            Err(e) => show_error_popup_and_panic(e, "Failed to create dummy material"),
+        };
+
+        self.render_items.push(RenderItem {
+            mesh: plane_mesh,
+            material: material.clone(),
+            transform: glam::Mat4::IDENTITY,
+        });
+
+        self.render_items.push(RenderItem {
+            mesh: sphere_mesh,
+            material,
+            transform: glam::Mat4::IDENTITY,
+        });
+    }
+
+    fn clear(&mut self) {
+        self.renderer = None;
+
+        let device_manager = self.graphics_context.device_manager.as_ref().unwrap();
+        let device = &device_manager.device;
+
+        let mut unique_meshes = HashSet::new();
+        let mut unique_materials = HashSet::new();
+
+        for render_item in &self.render_items {
+            unique_meshes.insert(Arc::as_ptr(&render_item.mesh));
+            unique_materials.insert(Arc::as_ptr(&render_item.material));
+        }
+
+        for mesh_ptr in &unique_meshes {
+            let mesh = unsafe { Arc::from_raw(*mesh_ptr) };
+            unsafe {
+                device.destroy_buffer(mesh.vertex_buffer, None);
+                device.free_memory(mesh.vertex_memory, None);
+                device.destroy_buffer(mesh.index_buffer, None);
+                device.free_memory(mesh.index_memory, None);
+            }
+            std::mem::forget(mesh);
+        }
+
+        for material_ptr in &unique_materials {
+            let material = unsafe { Arc::from_raw(*material_ptr) };
+            unsafe {
+                device.destroy_descriptor_pool(material.descriptor_pool, None);
+                device.destroy_descriptor_set_layout(material.descriptor_set_layout, None);
+            }
+            std::mem::forget(material);
+        }
+
+        self.render_items.clear();
+
+        self.graphics_context.destroy();
     }
 }
 
@@ -67,8 +263,7 @@ impl WindowEventHandler for TestWindowEventHandler {
     fn on_window_lost(&mut self) {
         println!("Window lost");
 
-        self.renderer = None;
-        self.graphics_context.destroy();
+        self.clear();
     }
 
     fn on_window_resized(&mut self, size: WindowSize) {
@@ -79,7 +274,7 @@ impl WindowEventHandler for TestWindowEventHandler {
 
     fn redraw(&mut self) {
         if let Some(renderer) = &self.renderer {
-            match self.graphics_context.redraw(renderer) {
+            match self.graphics_context.redraw(renderer, &self.render_items) {
                 Ok(renderer_needs_recreation) => {
                     if renderer_needs_recreation {
                         self.recreate_renderer();
@@ -91,8 +286,7 @@ impl WindowEventHandler for TestWindowEventHandler {
     }
 
     fn on_window_close_requested(&mut self) {
-        self.renderer = None;
-        self.graphics_context.destroy();
+        self.clear();
     }
 }
 
@@ -110,6 +304,7 @@ fn main() {
                 Err(e) => show_error_popup_and_panic(e, "Failed to create graphics context"),
             },
             renderer: None,
+            render_items: Vec::new(),
         },
     )
     .start_event_loop()

@@ -19,14 +19,17 @@ pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str)
         .unwrap();
     panic!("{}: {}", context, error);
 }
+
+struct EmptyRenderItem;
+
 struct EmptyRenderer;
 
-impl Renderer for EmptyRenderer {
-    fn render(&self, _frame_context: &FrameContext) {}
+impl Renderer<EmptyRenderItem> for EmptyRenderer {
+    fn render(&self, _frame_context: &FrameContext, _render_items: &[EmptyRenderItem]) {}
 }
 
 struct TestWindowEventHandler {
-    graphics_context: GraphicsContext<EmptyRenderer>,
+    graphics_context: GraphicsContext,
     renderer: Option<EmptyRenderer>,
 }
 
@@ -69,7 +72,7 @@ impl WindowEventHandler for TestWindowEventHandler {
 
     fn redraw(&mut self) {
         if let Some(renderer) = &self.renderer {
-            match self.graphics_context.redraw(renderer) {
+            match self.graphics_context.redraw(renderer, &[]) {
                 Ok(renderer_needs_recreation) => {
                     if renderer_needs_recreation {
                         self.recreate_renderer();

@@ -6,6 +6,6 @@ pub struct FrameContext {
     pub image_index: usize,
 }
 
-pub trait Renderer {
-    fn render(&self, frame_context: &FrameContext);
+pub trait Renderer<R> {
+    fn render(&self, frame_context: &FrameContext, render_items: &[R]);
 }

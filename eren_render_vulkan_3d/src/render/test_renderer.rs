@@ -2,7 +2,10 @@ use ash::vk;
 use eren_render_vulkan_core::renderer::{FrameContext, Renderer};
 use thiserror::Error;
 
-use crate::passes::test_pass::{TestPass, TestPassError};
+use crate::{
+    passes::test_pass::{TestPass, TestPassError},
+    render::render_item::RenderItem,
+};
 
 #[derive(Debug, Error)]
 pub enum TestRendererError {
@@ -26,8 +29,8 @@ impl TestRenderer {
     }
 }
 
-impl Renderer for TestRenderer {
-    fn render(&self, frame_context: &FrameContext) {
-        self.test_pass.record(frame_context);
+impl Renderer<RenderItem> for TestRenderer {
+    fn render(&self, frame_context: &FrameContext, render_items: &[RenderItem]) {
+        self.test_pass.record(frame_context, render_items);
     }
 }

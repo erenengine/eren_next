@@ -80,7 +80,7 @@ pub enum GraphicsContextError {
     DeviceWaitIdleFailed(String),
 }
 
-pub struct GraphicsContext<R: Renderer> {
+pub struct GraphicsContext {
     entry: ash::Entry,
 
     window: Option<Arc<Window>>,
@@ -102,11 +102,9 @@ pub struct GraphicsContext<R: Renderer> {
 
     current_frame: usize,
     swapchain_needs_recreation: bool,
-
-    phantom: std::marker::PhantomData<R>,
 }
 
-impl<R: Renderer> GraphicsContext<R> {
+impl GraphicsContext {
     pub fn new() -> Result<Self, GraphicsContextError> {
         let entry = unsafe { ash::Entry::load()? };
         Ok(Self {
@@ -130,8 +128,6 @@ impl<R: Renderer> GraphicsContext<R> {
 
             current_frame: 0,
             swapchain_needs_recreation: false,
-
-            phantom: std::marker::PhantomData,
         })
     }
 
@@ -347,7 +343,11 @@ impl<R: Renderer> GraphicsContext<R> {
         Ok(())
     }
 
-    pub fn redraw(&mut self, renderer: &R) -> Result<bool, GraphicsContextError> {
+    pub fn redraw<R: Renderer<RI>, RI>(
+        &mut self,
+        renderer: &R,
+        render_items: &[RI],
+    ) -> Result<bool, GraphicsContextError> {
         let mut renderer_needs_recreation = false;
 
         if let (Some(device_manager), Some(swapchain_manager)) =
@@ -410,10 +410,13 @@ impl<R: Renderer> GraphicsContext<R> {
                     .map_err(|e| GraphicsContextError::BeginCommandBufferFailed(e.to_string()))?;
             }
 
-            renderer.render(&FrameContext {
-                command_buffer,
-                image_index: image_index as usize,
-            });
+            renderer.render(
+                &FrameContext {
+                    command_buffer,
+                    image_index: image_index as usize,
+                },
+                render_items,
+            );
 
             unsafe {
                 device_manager
@@ -481,7 +484,7 @@ impl<R: Renderer> GraphicsContext<R> {
     }
 }
 
-impl<R: Renderer> Drop for GraphicsContext<R> {
+impl Drop for GraphicsContext {
     fn drop(&mut self) {
         self.destroy();
     }

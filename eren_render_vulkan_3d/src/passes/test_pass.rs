@@ -2,7 +2,9 @@ use ash::vk;
 use eren_render_vulkan_core::renderer::FrameContext;
 use thiserror::Error;
 
-use crate::{constants::CLEAR_COLOR, shader::create_shader_module};
+use crate::{
+    constants::CLEAR_COLOR, render::render_item::RenderItem, shader::create_shader_module,
+};
 
 const VERT_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.vert.spv");
 const FRAG_SHADER_BYTES: &[u8] = include_bytes!("../shaders/test.frag.spv");
@@ -224,7 +226,7 @@ impl TestPass {
         })
     }
 
-    pub fn record(&self, frame_context: &FrameContext) {
+    pub fn record(&self, frame_context: &FrameContext, _render_items: &[RenderItem]) {
         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .framebuffer(self.swapchain_framebuffers[frame_context.image_index])
