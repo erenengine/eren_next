@@ -425,15 +425,15 @@ impl GraphicsContext {
                     .map_err(|e| GraphicsContextError::EndCommandBufferFailed(e.to_string()))?;
             }
 
-            let wait_semaphores = [self.image_available_semaphores[self.current_frame]];
-            let signal_semaphores = [self.render_finished_semaphores[image_index as usize]];
-            let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+            let wait_semaphore = self.image_available_semaphores[self.current_frame];
+            let signal_semaphore = self.render_finished_semaphores[image_index as usize];
+            let wait_dst_stage_mask = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT;
 
-            let submit_infos = [vk::SubmitInfo::default()
-                .wait_semaphores(&wait_semaphores)
-                .wait_dst_stage_mask(&wait_dst_stage_mask)
+            let submit_info = vk::SubmitInfo::default()
+                .wait_semaphores(std::slice::from_ref(&wait_semaphore))
+                .wait_dst_stage_mask(std::slice::from_ref(&wait_dst_stage_mask))
                 .command_buffers(std::slice::from_ref(&command_buffer))
-                .signal_semaphores(&signal_semaphores)];
+                .signal_semaphores(std::slice::from_ref(&signal_semaphore));
 
             unsafe {
                 device_manager
@@ -445,18 +445,17 @@ impl GraphicsContext {
                     .device
                     .queue_submit(
                         device_manager.graphics_queue,
-                        &submit_infos,
+                        std::slice::from_ref(&submit_info),
                         self.frame_completion_fences[self.current_frame],
                     )
                     .map_err(|e| GraphicsContextError::QueueSubmitFailed(e.to_string()))?;
             }
 
-            let swapchains = [swapchain_manager.swapchain];
-            let indices = [image_index];
+            let swapchain = swapchain_manager.swapchain;
             let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(&signal_semaphores)
-                .swapchains(&swapchains)
-                .image_indices(&indices);
+                .wait_semaphores(std::slice::from_ref(&signal_semaphore))
+                .swapchains(std::slice::from_ref(&swapchain))
+                .image_indices(std::slice::from_ref(&image_index));
 
             let present_result = unsafe {
                 swapchain_manager

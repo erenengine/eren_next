@@ -64,16 +64,16 @@ impl GeometryPass {
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .aspect_mask(vk::ImageAspectFlags::DEPTH);
 
-        let subpasses = [vk::SubpassDescription2::default()
+        let subpass = vk::SubpassDescription2::default()
             .color_attachments(std::slice::from_ref(&color_attachment_ref))
             .depth_stencil_attachment(&depth_attachment_ref)
-            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)];
+            .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS);
 
         let attachments = [color_attachment, depth_attachment];
 
         let render_pass_info = vk::RenderPassCreateInfo2::default()
             .attachments(&attachments)
-            .subpasses(&subpasses);
+            .subpasses(std::slice::from_ref(&subpass));
 
         let render_pass = unsafe {
             device

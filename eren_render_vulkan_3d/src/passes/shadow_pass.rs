@@ -125,15 +125,13 @@ impl ShadowPass {
             .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .aspect_mask(vk::ImageAspectFlags::DEPTH);
 
-        let attachments = [depth_attachment];
-
-        let subpasses = [vk::SubpassDescription2::default()
+        let subpass = vk::SubpassDescription2::default()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .depth_stencil_attachment(&depth_attachment_ref)];
+            .depth_stencil_attachment(&depth_attachment_ref);
 
         let render_pass_info = vk::RenderPassCreateInfo2::default()
-            .attachments(&attachments)
-            .subpasses(&subpasses);
+            .attachments(std::slice::from_ref(&depth_attachment))
+            .subpasses(std::slice::from_ref(&subpass));
 
         let render_pass = unsafe {
             device
@@ -141,11 +139,9 @@ impl ShadowPass {
                 .map_err(|e| ShadowPassError::CreateRenderPassFailed(e.to_string()))?
         };
 
-        let view_attachments = [depth_image_view];
-
         let framebuffer_info = vk::FramebufferCreateInfo::default()
             .render_pass(render_pass)
-            .attachments(&view_attachments)
+            .attachments(std::slice::from_ref(&depth_image_view))
             .width(image_extent.width)
             .height(image_extent.height)
             .layers(1);
@@ -157,14 +153,14 @@ impl ShadowPass {
         };
 
         // Create descriptor set layout matching shader
-        let ubo_bindings = [vk::DescriptorSetLayoutBinding::default()
+        let ubo_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
             .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::VERTEX)];
+            .stage_flags(vk::ShaderStageFlags::VERTEX);
 
-        let descriptor_set_layout_info =
-            vk::DescriptorSetLayoutCreateInfo::default().bindings(&ubo_bindings);
+        let descriptor_set_layout_info = vk::DescriptorSetLayoutCreateInfo::default()
+            .bindings(std::slice::from_ref(&ubo_binding));
 
         let descriptor_set_layout = unsafe {
             device
@@ -172,17 +168,15 @@ impl ShadowPass {
                 .map_err(|e| ShadowPassError::DescriptorSetLayoutCreationFailed(e.to_string()))?
         };
 
-        let descriptor_set_layouts = [descriptor_set_layout];
-
         // Pipeline layout with descriptor set + push constant
-        let push_constant_ranges = [vk::PushConstantRange::default()
+        let push_constant_range = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX)
             .offset(0)
-            .size(64)]; // mat4
+            .size(64); // mat4
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(&descriptor_set_layouts)
-            .push_constant_ranges(&push_constant_ranges);
+            .set_layouts(std::slice::from_ref(&descriptor_set_layout))
+            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
 
         let pipeline_layout = unsafe {
             device
@@ -195,46 +189,46 @@ impl ShadowPass {
 
         let main_function_name = std::ffi::CString::new("main").unwrap();
 
-        let shader_stages = [vk::PipelineShaderStageCreateInfo::default()
+        let shader_stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
             .module(vertex_shader_module)
-            .name(&main_function_name)];
+            .name(&main_function_name);
 
-        let binding_descriptions = [vk::VertexInputBindingDescription::default()
+        let binding_description = vk::VertexInputBindingDescription::default()
             .binding(0)
             .stride(std::mem::size_of::<[f32; 3]>() as u32) // vec3 position
-            .input_rate(vk::VertexInputRate::VERTEX)];
+            .input_rate(vk::VertexInputRate::VERTEX);
 
-        let attribute_descriptions = [vk::VertexInputAttributeDescription::default()
+        let attribute_description = vk::VertexInputAttributeDescription::default()
             .location(0)
             .binding(0)
             .format(vk::Format::R32G32B32_SFLOAT)
-            .offset(0)];
+            .offset(0);
 
         let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
-            .vertex_binding_descriptions(&binding_descriptions)
-            .vertex_attribute_descriptions(&attribute_descriptions);
+            .vertex_binding_descriptions(std::slice::from_ref(&binding_description))
+            .vertex_attribute_descriptions(std::slice::from_ref(&attribute_description));
 
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
 
-        let viewports = [vk::Viewport {
+        let viewport = vk::Viewport {
             x: 0.,
             y: 0.,
             width: image_extent.width as f32,
             height: image_extent.height as f32,
             min_depth: 0.,
             max_depth: 1.,
-        }];
+        };
 
-        let scissors = [vk::Rect2D {
+        let scissors = vk::Rect2D {
             offset: vk::Offset2D { x: 0, y: 0 },
             extent: image_extent,
-        }];
+        };
 
         let viewport_info = vk::PipelineViewportStateCreateInfo::default()
-            .viewports(&viewports)
-            .scissors(&scissors);
+            .viewports(std::slice::from_ref(&viewport))
+            .scissors(std::slice::from_ref(&scissors));
 
         let rasterizer_info = vk::PipelineRasterizationStateCreateInfo::default()
             .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
@@ -251,7 +245,7 @@ impl ShadowPass {
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-            .stages(&shader_stages)
+            .stages(std::slice::from_ref(&shader_stage))
             .vertex_input_state(&vertex_input_info)
             .input_assembly_state(&input_assembly_info)
             .viewport_state(&viewport_info)
@@ -355,8 +349,10 @@ impl Drop for ShadowPass {
                 .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device
                 .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+
             self.device.destroy_framebuffer(self.framebuffer, None);
             self.device.destroy_render_pass(self.render_pass, None);
+
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.image, None);
             self.device.free_memory(self.memory, None);
