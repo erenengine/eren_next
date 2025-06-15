@@ -22,13 +22,6 @@ const PLANE_VERTS: [[f32; 8]; 4] = [
 ];
 const PLANE_IDXS: [u32; 6] = [0, 1, 2, 2, 3, 0];
 
-const SPHERE_VERTS: [[f32; 8]; 3] = [
-    [0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.5, 1.0],
-    [-1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-    [1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
-];
-const SPHERE_IDXS: [u32; 3] = [0, 1, 2];
-
 pub fn show_error_popup_and_panic<E: std::fmt::Display>(error: E, context: &str) -> ! {
     DialogBuilder::message()
         .set_level(MessageLevel::Error)
@@ -111,6 +104,38 @@ fn create_mesh_from_data(
     }))
 }
 
+// Dummy sphere generator returning ([f32; 8] position+normal+uv, u32 indices).
+fn generate_uv_sphere(radius: f32, lon: u32, lat: u32) -> (Vec<[f32; 8]>, Vec<u32>) {
+    let mut verts = Vec::new();
+    let mut idxs = Vec::new();
+    for y in 0..=lat {
+        let v = y as f32 / lat as f32;
+        let theta = v * std::f32::consts::PI;
+        for x in 0..=lon {
+            let u = x as f32 / lon as f32;
+            let phi = u * std::f32::consts::TAU;
+            let pos = [
+                radius * phi.sin() * theta.sin(),
+                radius * theta.cos(),
+                radius * phi.cos() * theta.sin(),
+            ];
+            let nx = pos[0] / radius;
+            let ny = pos[1] / radius;
+            let nz = pos[2] / radius;
+            verts.push([pos[0], pos[1], pos[2], nx, ny, nz, u, v]);
+        }
+    }
+    // indices
+    for y in 0..lat {
+        for x in 0..lon {
+            let i0 = y * (lon + 1) + x;
+            let i1 = i0 + lon + 1;
+            idxs.extend_from_slice(&[i0, i1, i0 + 1, i0 + 1, i1, i1 + 1]);
+        }
+    }
+    (verts, idxs.iter().map(|&i| i as u32).collect())
+}
+
 fn create_dummy_material(device: &ash::Device) -> Result<Arc<Material>, vk::Result> {
     let layout_info = vk::DescriptorSetLayoutCreateInfo::default();
     let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None)? };
@@ -175,12 +200,14 @@ impl TestWindowEventHandler {
             Err(e) => show_error_popup_and_panic(e, "Failed to create plane mesh"),
         };
 
+        let (sphere_verts, sphere_idxs) = generate_uv_sphere(1.0, 32, 16);
+
         let sphere_mesh = match create_mesh_from_data(
             &instance_manager.instance,
             physical_device_manager.physical_device,
             &device_manager.device,
-            &SPHERE_VERTS,
-            &SPHERE_IDXS,
+            &sphere_verts,
+            &sphere_idxs,
         ) {
             Ok(mesh) => mesh,
             Err(e) => show_error_popup_and_panic(e, "Failed to create sphere mesh"),
